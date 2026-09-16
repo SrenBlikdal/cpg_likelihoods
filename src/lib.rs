@@ -1,6 +1,98 @@
+use bgzip::{BGZFReader, BGZFWriter, Compression as BgzipCompression};
+use flate2::Compression as GzipCompression;
+use flate2::read::MultiGzDecoder;
+use flate2::write::GzEncoder;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BedCompression {
+    Plain,
+    Gzip,
+    Bgzip,
+}
+
+fn detect_bed_compression(path: &Path) -> BedCompression {
+    let path_string = path.to_string_lossy();
+    let path_lower = path_string.to_ascii_lowercase();
+    if path_lower.ends_with(".bgz") {
+        BedCompression::Bgzip
+    } else if path_lower.ends_with(".gz") {
+        BedCompression::Gzip
+    } else {
+        BedCompression::Plain
+    }
+}
+
+pub fn open_bedmethyl_reader<P: AsRef<Path>>(
+    path: P,
+) -> Result<Box<dyn BufRead>, Box<dyn std::error::Error>> {
+    let path_ref = path.as_ref();
+    let file = File::open(path_ref)?;
+
+    match detect_bed_compression(path_ref) {
+        BedCompression::Plain => Ok(Box::new(BufReader::new(file))),
+        BedCompression::Gzip => Ok(Box::new(BufReader::new(MultiGzDecoder::new(file)))),
+        BedCompression::Bgzip => Ok(Box::new(BGZFReader::new(file)?)),
+    }
+}
+
+enum BedWriter {
+    Plain(BufWriter<File>),
+    Gzip(GzEncoder<File>),
+    Bgzip(BGZFWriter<File>),
+}
+
+impl BedWriter {
+    fn create<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+        let path_ref = path.as_ref();
+        let file = File::create(path_ref)?;
+
+        let writer = match detect_bed_compression(path_ref) {
+            BedCompression::Plain => Self::Plain(BufWriter::new(file)),
+            BedCompression::Gzip => Self::Gzip(GzEncoder::new(file, GzipCompression::default())),
+            BedCompression::Bgzip => Self::Bgzip(BGZFWriter::new(file, BgzipCompression::default())),
+        };
+        Ok(writer)
+    }
+
+    fn finish(self) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            Self::Plain(mut writer) => {
+                writer.flush()?;
+                Ok(())
+            }
+            Self::Gzip(writer) => {
+                let mut file = writer.finish()?;
+                file.flush()?;
+                Ok(())
+            }
+            Self::Bgzip(writer) => {
+                writer.close()?;
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Write for BedWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Plain(writer) => writer.write(buf),
+            Self::Gzip(writer) => writer.write(buf),
+            Self::Bgzip(writer) => writer.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Plain(writer) => writer.flush(),
+            Self::Gzip(writer) => writer.flush(),
+            Self::Bgzip(writer) => writer.flush(),
+        }
+    }
+}
 
 /// One parsed bedMethyl locus using your fixed schema:
 /// - cov = col5 (1-based)
@@ -72,8 +164,7 @@ pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
         return Err("min_ratio must be between 0 and 1".into());
     }
 
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
+    let reader = open_bedmethyl_reader(path)?;
 
     let mut sum_cov: u128 = 0;
     let mut sum_d: u128 = 0;
@@ -214,8 +305,8 @@ pub fn append_pl_columns<P: AsRef<Path>>(
     e_c2n: f64,
     n: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let reader = BufReader::new(File::open(input_bed)?);
-    let mut writer = BufWriter::new(File::create(output_bed)?);
+    let reader = open_bedmethyl_reader(input_bed)?;
+    let mut writer = BedWriter::create(output_bed)?;
 
     for line in reader.lines() {
         let line = line?;
@@ -243,8 +334,7 @@ pub fn append_pl_columns<P: AsRef<Path>>(
         }
     }
 
-    writer.flush()?;
-    Ok(())
+    writer.finish()
 }
 
 /// Classification result for summary.
@@ -299,5 +389,109 @@ pub fn classify_from_pl(
         1 => LocusClass::HetCpg,
         2 => LocusClass::NonCpg,
         _ => LocusClass::Unclassified,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    struct Cleanup {
+        paths: Vec<std::path::PathBuf>,
+    }
+
+    impl Cleanup {
+        fn new(paths: Vec<std::path::PathBuf>) -> Self {
+            Self { paths }
+        }
+    }
+
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            for path in &self.paths {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+
+    fn temp_path(filename: &str) -> std::path::PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after UNIX_EPOCH")
+            .as_nanos();
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("cpg_likelihoods_{suffix}_{counter}_{filename}"))
+    }
+
+    fn sample_bed_lines() -> Vec<&'static str> {
+        vec![
+            "#chrom\tstart\tend\tname\tcov\tscore\tstrand\ta\tb\tc\td\te\tf\tg\td15\ti\td17\td18",
+            "chr1\t0\t1\tlocus1\t10\t0\t+\t0\t0\t0\t0\t0\t0\t0\t2\t0\t1\t1",
+        ]
+    }
+
+    fn write_lines(path: &Path, lines: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        let mut writer = BedWriter::create(path)?;
+        for line in lines {
+            writeln!(writer, "{line}")?;
+        }
+        writer.finish()
+    }
+
+    #[test]
+    fn estimate_error_c2n_reads_plain_gz_and_bgz() -> Result<(), Box<dyn std::error::Error>> {
+        let lines = sample_bed_lines();
+        let plain_path = temp_path("input.bed");
+        let gzip_path = temp_path("input.bed.gz");
+        let bgzip_path = temp_path("input.bed.bgz");
+        let _cleanup = Cleanup::new(vec![plain_path.clone(), gzip_path.clone(), bgzip_path.clone()]);
+
+        write_lines(&plain_path, &lines)?;
+        write_lines(&gzip_path, &lines)?;
+        write_lines(&bgzip_path, &lines)?;
+
+        let expected = 4.0 / 14.0;
+        let plain = estimate_error_c2n_from_bedmethyl(&plain_path, 1, 100, 0.0)?;
+        let gz = estimate_error_c2n_from_bedmethyl(&gzip_path, 1, 100, 0.0)?;
+        let bgz = estimate_error_c2n_from_bedmethyl(&bgzip_path, 1, 100, 0.0)?;
+
+        assert!((plain - expected).abs() < 1e-12);
+        assert!((gz - expected).abs() < 1e-12);
+        assert!((bgz - expected).abs() < 1e-12);
+
+        Ok(())
+    }
+
+    #[test]
+    fn append_pl_columns_writes_gz_and_bgz() -> Result<(), Box<dyn std::error::Error>> {
+        let lines = sample_bed_lines();
+        let input_path = temp_path("append_input.bed");
+        let output_gz_path = temp_path("append_output.bed.gz");
+        let output_bgz_path = temp_path("append_output.bed.bgz");
+        let _cleanup = Cleanup::new(vec![
+            input_path.clone(),
+            output_gz_path.clone(),
+            output_bgz_path.clone(),
+        ]);
+
+        write_lines(&input_path, &lines)?;
+        append_pl_columns(&input_path, &output_gz_path, 0.1, 2.0)?;
+        append_pl_columns(&input_path, &output_bgz_path, 0.1, 2.0)?;
+
+        let gz_lines: Vec<String> = open_bedmethyl_reader(&output_gz_path)?.lines().collect::<Result<_, _>>()?;
+        let bgz_lines: Vec<String> = open_bedmethyl_reader(&output_bgz_path)?.lines().collect::<Result<_, _>>()?;
+
+        for out_lines in [&gz_lines, &bgz_lines] {
+            assert_eq!(out_lines.len(), 2);
+            assert!(out_lines[0].ends_with("\tPL_hom_cpg\tPL_het_cpg\tPL_non_cpg"));
+            assert_eq!(out_lines[1].split('\t').count(), 21);
+        }
+
+        Ok(())
     }
 }

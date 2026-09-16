@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+flate2 = "1"
+bgzip = "0.3"
