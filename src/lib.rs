@@ -401,6 +401,24 @@ mod tests {
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+    struct Cleanup {
+        paths: Vec<std::path::PathBuf>,
+    }
+
+    impl Cleanup {
+        fn new(paths: Vec<std::path::PathBuf>) -> Self {
+            Self { paths }
+        }
+    }
+
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            for path in &self.paths {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+
     fn temp_path(filename: &str) -> std::path::PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -431,6 +449,7 @@ mod tests {
         let plain_path = temp_path("input.bed");
         let gzip_path = temp_path("input.bed.gz");
         let bgzip_path = temp_path("input.bed.bgz");
+        let _cleanup = Cleanup::new(vec![plain_path.clone(), gzip_path.clone(), bgzip_path.clone()]);
 
         write_lines(&plain_path, &lines)?;
         write_lines(&gzip_path, &lines)?;
@@ -445,9 +464,6 @@ mod tests {
         assert!((gz - expected).abs() < 1e-12);
         assert!((bgz - expected).abs() < 1e-12);
 
-        fs::remove_file(plain_path)?;
-        fs::remove_file(gzip_path)?;
-        fs::remove_file(bgzip_path)?;
         Ok(())
     }
 
@@ -457,6 +473,11 @@ mod tests {
         let input_path = temp_path("append_input.bed");
         let output_gz_path = temp_path("append_output.bed.gz");
         let output_bgz_path = temp_path("append_output.bed.bgz");
+        let _cleanup = Cleanup::new(vec![
+            input_path.clone(),
+            output_gz_path.clone(),
+            output_bgz_path.clone(),
+        ]);
 
         write_lines(&input_path, &lines)?;
         append_pl_columns(&input_path, &output_gz_path, 0.1, 2.0)?;
@@ -471,9 +492,6 @@ mod tests {
             assert_eq!(out_lines[1].split('\t').count(), 21);
         }
 
-        fs::remove_file(input_path)?;
-        fs::remove_file(output_gz_path)?;
-        fs::remove_file(output_bgz_path)?;
         Ok(())
     }
 }
