@@ -14,15 +14,14 @@ enum BedCompression {
 }
 
 fn detect_bed_compression(path: &Path) -> BedCompression {
-    match path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_ascii_lowercase())
-        .as_deref()
-    {
-        Some("bgz") => BedCompression::Bgzip,
-        Some("gz") => BedCompression::Gzip,
-        _ => BedCompression::Plain,
+    let path_string = path.to_string_lossy();
+    let path_lower = path_string.to_ascii_lowercase();
+    if path_lower.ends_with(".bgz") {
+        BedCompression::Bgzip
+    } else if path_lower.ends_with(".gz") {
+        BedCompression::Gzip
+    } else {
+        BedCompression::Plain
     }
 }
 
@@ -397,14 +396,18 @@ pub fn classify_from_pl(
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn temp_path(filename: &str) -> std::path::PathBuf {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock should be after UNIX_EPOCH")
             .as_nanos();
-        std::env::temp_dir().join(format!("cpg_likelihoods_{suffix}_{filename}"))
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("cpg_likelihoods_{suffix}_{counter}_{filename}"))
     }
 
     fn sample_bed_lines() -> Vec<&'static str> {
