@@ -1,7 +1,6 @@
 use clap::Parser;
-use cpg_likelihoods::{classify_from_pl, LocusClass};
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use cpg_likelihoods::{classify_from_pl, open_bedmethyl_reader, LocusClass};
+use std::io::BufRead;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -10,7 +9,7 @@ use std::io::{BufRead, BufReader};
     about = "Locus classification summary from PL cols 19-21"
 )]
 struct Args {
-    /// Input bedMethyl file with PL columns in 19-21
+    /// Input bedMethyl file with PL columns in 19-21 (.bed, .bed.gz, or .bed.bgz)
     path: String,
 
     /// Minimum GQ threshold
@@ -41,8 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    let file = File::open(&args.path)?;
-    let reader = BufReader::new(file);
+    let reader = open_bedmethyl_reader(&args.path)?;
 
     let mut c = Counts::default();
 

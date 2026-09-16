@@ -8,7 +8,7 @@ use cpg_likelihoods::estimate_error_c2n_from_bedmethyl;
     about = "Estimate CpG->non-CpG error rate (e_c2n) from bedMethyl"
 )]
 struct Args {
-    /// Input bedMethyl file
+    /// Input bedMethyl file (.bed, .bed.gz, or .bed.bgz)
     path: String,
 
     /// Minimum coverage (col5)

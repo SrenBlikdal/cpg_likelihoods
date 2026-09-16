@@ -8,10 +8,10 @@ use cpg_likelihoods::{append_pl_columns, estimate_error_c2n_from_bedmethyl};
     about = "Compute e_c2n and append PL_hom_cpg/PL_het_cpg/PL_non_cpg as cols 19-21"
 )]
 struct Args {
-    /// Input bedMethyl file
+    /// Input bedMethyl file (.bed, .bed.gz, or .bed.bgz)
     path: String,
 
-    /// Output file with PL columns appended
+    /// Output file with PL columns appended (.bed, .bed.gz, or .bed.bgz)
     #[arg(long)]
     out: String,
 
