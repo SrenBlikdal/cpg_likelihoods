@@ -1,51 +1,41 @@
 # Rust implementation of CpG-likelihoods
 
-Single molecule sequencing is redily addapted for the analysis of epigenetic modification of DNA methylation (5mC) and hydroxymethylation. 
-One advantage of single-molecule sequencing platforms from Oxford Nanopore (Nanopore) and Pacific bio.. (PacBio) is the readout of both the primary sequence
-and epigenetic modificatation in modbam format. This enables extending analysis to sample specific CpG loci, not represented in the reference genome. 
-These non-refererence CpG loci typically represent ~50 % of the heterozygous CpG loci in a sample and a number of homozygous CpG loci depending on the 
-evolutionary distance between a sample and the reference genome. As these sample-specific loci are important for accurate modification analysis we here 
-provide a plugin for identifying sample-specific CpG loci in a sample. 
+Single-molecule sequencing is readily adapted for the analysis of epigenetic DNA modifications such as 5-methylcytosine (5mC) and 5-hydroxymethylcytosine (5hmC). One major advantage of Oxford Nanopore (Nanopore) and Pacific Biosciences (PacBio) sequencing platforms is that they can capture both the primary DNA sequence and epigenetic modification state in modified BAM (modBAM) format.
 
-Example usage modkit pileup --cpg-likelihood --interactive
+This enables analysis at sample-specific CpG loci that are not represented in the reference genome. These non-reference CpG sites often account for approximately 50% of heterozygous CpG loci in a sample, and also include a number of homozygous CpG loci depending on the evolutionary distance between the sample and the reference genome.
 
-Use this error rate or manually type errorrate. 
+Because these sample-specific loci can be important for accurate modification analysis, this project provides a workflow for identifying and analyzing them.
 
-Calculating likelihoods for file 
-Save output as [inputfile].bed 
+## Installation
+{add installation guide}
 
-# How it works
+## Example usage:
+{add example}
 
-## Estimate error rate
-First part of the program is to estimate the sample-specific CpG error-rate directly from the bedMethyl file after modkit pileup.  
-While the errorrate depend on sequencing context, mapping, and we use a simple approach of... 
+```bash
+modkit pileup --cpg-likelihood --interactive
+```
 
-{Insert Formula}
+## Workflow overview
+The workflow consists of three modules:
 
-Where X,Y and Z represent. 
+1. Estimate error rate
+This step estimates the sequencing/mapping error rate at putative CpG sites in the bedmethyl file. This error rate is used to model which sites represent homozygous, heterozygous, and non-CpG sites.
 
-This module can be skipped by manually assigning a error rate using --error_c2n
+{insert formula}
 
-## CpG-likelihoods 
-The likelihood that a given site is...
+{insert example}
 
-{insert formula here}
+2. CpG-likelihoods
+This module computes CpG likelihoods for all sites represented in the bedmethyl file, including CpG loci that are not present in the reference genome.
 
-{Work through an example}
+{insert formula}
 
-IGV screenshot - 
+{insert example}
 
-Loci xx has
+3. Summarize likelihoods
+This step summarizes the computed likelihoods for downstream interpretation and comparison across loci or samples.
 
-The PL scores are added to col19 col20 col21  
+{insert formula}
 
-## Summarize likelihoods
-A bedmethyl file with PL fields in columns 19-21 can be summarize to check the number of homozygous given the type of CpG state and a GQ threshold..
-
-
-
-
-
-
-
-
+{insert example}
