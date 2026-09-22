@@ -1,20 +1,77 @@
 # Rust implementation of CpG-likelihoods
 Single-molecule sequencing is readily adapted for the analysis of epigenetic DNA modifications such as 5-methylcytosine (5mC) and 5-hydroxymethylcytosine (5hmC). One major advantage of Oxford Nanopore (Nanopore) and Pacific Biosciences (PacBio) sequencing platforms is that they capture both the primary DNA sequence and epigenetic modification states. This enables epigenetic analysis of sample-specific CpG loci that are not represented in the reference genome which typically account for  50% of heterozygous CpG loci in a sample, and a number of homozygous CpG loci depending on the evolutionary distance between the sample and the reference genome. Because these sample-specific loci are important for accurate modification analysis, this project provides a workflow for identifying them.
 
-## Installation
-{add installation guide}
+## Table of contents
 
-## Example usage:
-{add example}
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [Detailed usage](#detailed-usage)
+  - [Estimate error rate](#estimate-error-rate)
+    - [Example](#example-1)
+  - [Calculate likelihoods](#calculate-likelihoods)
+    - [Example](#example-2)
+  - [Summarize and filter likelihoods](#summarize-and-filter-likelihoods)
+    - [Example](#example-3)
+    - [Example](#example-4)
+- [Notes](#notes)
+
+## Installation
+
+This project is written in Rust and uses Cargo for building and running the tools.
+
+1. Install the Rust toolchain if it is not already installed:
 
 ```bash
-modkit pileup --cpg-likelihood --interactive
+curl https://sh.rustup.rs -sSf | sh
+source $HOME/.cargo/env
 ```
 
-# Workflow overview
+2. Clone the repository and build the project:
+
+```bash
+git clone https://github.com/SrenBlikdal/cpg_likelihoods.git
+cd cpg_likelihoods
+cargo build --release
+```
+
+3. The compiled binaries will be available in `target/release/`:
+
+```bash
+ls target/release/
+```
+
+You can then run the tools directly, for example:
+
+```bash
+./target/release/error_c2n input.bedMethyl
+```
+
+or use Cargo to run them from the project root:
+
+```bash
+cargo run --bin error_c2n -- input.bedMethyl
+```
+
+## Quickstart 
+
+```bash
+#Estimate the CpG-to-non-CpG error rate: 
+cargo run --bin error_c2n -- input.bedMethyl
+
+#Calculate likelihoods and append PL columns to the bedMethyl file: 
+cargo run --bin likelihoods -- input.bedMethyl --out output.bedMethyl
+
+#Summarize the CpG states in the bedMethyl  
+cargo run --bin summarize_likelihoods -- output.bedMethyl --min-gq 20
+
+#Filter for Homozygous/heterozygous CpG loci and remove PL columns. <- Planed
+cargo run --bin filter_likelihoods -- output.bedMethyl --state CpG_hom/het --min-gq 20
+```
+
+## Detailed usage 
 The workflow consists of three modules:
 
-## Estimate error rate
+### Estimate error rate
 This step estimates the combined error rate for sequencing and mapping errors at CpG loci. The input is a `bedMethyl` file containing read-based pileup information for all candidate CpG sites. 
 
 For each locus, the pileup has recorded genotypic information as:
@@ -41,7 +98,7 @@ $$
 
 This estimate is treated as the sample-wide CpG error rate and is used in subsequent likelihood calculations. The approach assumes that sequencing and mapping errors are approximately symmetric across CpG and non-CpG states throughout the genome.
 
-**Example**
+#### Example 1
 
 | chrom | start | end | ... | N<sub>valid_cov | N<sub>delete | N<sub>diff | N<sub>nocall | Retained |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -56,7 +113,7 @@ $$
 \hat{\varepsilon} = \frac{2} {(58+2)} = 0.03333
 $$
 
-## Likelihoods
+### Calculate likelihoods
 This step models the likelihood of observing the read data given an underlying CpG state. Under the assumption that all loci are biallelic and diploid the three possible CpG states (z) are:
 
 - Homozygues CpG (CpG<sub>hom</sub>): Both alleles at the locus are CpG
@@ -83,7 +140,7 @@ $$
 
 These values are transformed to raw Phred-scaled likelihoods for the CpG state L(z|Data) by -10*log(L(z|Data)) and normalized such that the lowest PL for each locus is 0 and the rest are scaled relative to that. 
 
-**Example**
+#### Example 2
 
 The first locus in the example above (`chr1:1000-1001`) had 30 read supporting CpG and 2 reads supporting non-CpG and a estimated error rate of 0.03333:
 
@@ -164,7 +221,7 @@ The example table with normalized PL added:
 | chr1 | 1021 | 1022 | ... | 1 | 0 | 28 | 1 | 409 | 71 | 0 |
 | chr1 | 1033 | 1034 | ... | 30 | 6 | 1 | 1 | 8 | 0 | 330 |
 
-### Summarize/filter likelihoods
+### Summarize and filter likelihoods
 This step summarizes and filter across the inferred CpG states in a `bedMethyl` file after likelihood calculations.
 
 For each locus, the function: 
@@ -174,7 +231,7 @@ For each locus, the function:
 
 It is often hard to distinguish homozygous and heterozygous CpGs leading to a high number of unclassified loci with CpG<sub>hom</sub> and CpG<sub>het</sub> as the two most likely CpG states, but low QC. To keep these loci for downstream analysis CpG<sub>hom</sub> and CpG<sub>het</sub> can be collapsed to combined CpG state (CpG<sub>hom/het</sub>) with the corresponding GQ describing the certainty that the locus is not a non-CpG. This setting classifies more loci than CpG<sub>hom</sub> and CpG<sub>het</sub>.  
 
-**Example**
+#### Example 3
 
 | chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall | PL(CpG_hom) | PL(CpG_het) | PL(non-CpG) | state | GQ
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -199,25 +256,21 @@ Classification with collapsed homozygous and heterozygous CpG states:
 
 To filter a bedMethyl file after likelihood calculations we can use the filter likelihood function which follow the same logic as the summary function
 
-**Example**
-
-| chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall | PL(CpG_hom) | PL(CpG_het) | PL(non-CpG) | state | GQ
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| chr1 | 1000 | 1001 | ... | 30 | 0 | 0 | 2 | 0 | 62 | 408 | CpG_hom | 62 |
-| chr1 | 1001 | 1002 | ... | 28 | 0 | 0 | 0 | 0 | 77 | 412 | CpG_hom | 77 |
-| chr1 | 1011 | 1012 | ... | 15 | 0 | 15 | 1 | 193 | 0 | 47 | CpG_het | 47 |
-| chr1 | 1012 | 1013 | ... | 13 | 0 | 15 | 1 | 181 | 0 | 34 | CpG_het | 34 |
-| chr1 | 1021 | 1022 | ... | 1 | 0 | 28 | 1 | 409 | 71 | 0 | non-CpG | 71 |
-| chr1 | 1033 | 1034 | ... | 30 | 6 | 1 | 1 | 8 | 0 | 330 | CpG_het | 8 |
+#### Example 4
 
 filter likelihood --CpG_hom/het --GQ 20 
 
 | chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | chr1 | 1000 | 1001 | ... | 30 | 0 | 0 | 2 |
 | chr1 | 1001 | 1002 | ... | 28 | 0 | 0 | 0 |
-| chr1 | 1011 | 1012 | ... | 15 | 0 | 15 | 1 | 
-| chr1 | 1012 | 1013 | ... | 13 | 0 | 15 | 1 | 
+| chr1 | 1011 | 1012 | ... | 15 | 0 | 15 | 1 |
+| chr1 | 1012 | 1013 | ... | 13 | 0 | 15 | 1 |
 | chr1 | 1033 | 1034 | ... | 30 | 6 | 1 | 1 |
 
 The PL columns can be retained using --keep-pl
+
+## Notes
+Development alpha version - comes without any guaranty and with room for improvement.  
+
+
