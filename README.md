@@ -212,7 +212,7 @@ To filter a bedMethyl file after likelihood calculations we can use the filter l
 
 filter likelihood --CpG_hom/het --GQ 20 
 
-| chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall |
+| chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | chr1 | 1000 | 1001 | ... | 30 | 0 | 0 | 2 |
 | chr1 | 1001 | 1002 | ... | 28 | 0 | 0 | 0 |
@@ -220,4 +220,4 @@ filter likelihood --CpG_hom/het --GQ 20
 | chr1 | 1012 | 1013 | ... | 13 | 0 | 15 | 1 | 
 | chr1 | 1033 | 1034 | ... | 30 | 6 | 1 | 1 |
 
-
+The PL columns can be retained using --keep-pl
