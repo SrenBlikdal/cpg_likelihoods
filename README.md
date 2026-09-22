@@ -187,11 +187,12 @@ It is often hard to distinguish homozygous and heterozygous CpGs leading to a hi
 
 Given a minimum GQ threshold the summary reports: 
 - Total number of loci in the bedMethyl file.
+Classification with separate homozygous and heterozygous CpG states:
 - Number and percent of loci classified as CpG_hom.
 - Number and percent of loci classified as CpG_het.
 - Number and percent of loci classified as non-CpG.
 - Number and percent of unclassified loci.   
-
+Classification with collapsed homozygous and heterozygous CpG states:
 - Number and percent of loci classified as CpG_hom/het.
 - Number and percent of loci classified as non-CpG.
 - Number and percent of unclassified loci. 
