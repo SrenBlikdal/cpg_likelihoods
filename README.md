@@ -1,5 +1,46 @@
 # Rust implementation of CpG-likelihoods
-Single-molecule sequencing is readily adapted for the analysis of epigenetic DNA modifications such as 5-methylcytosine (5mC) and 5-hydroxymethylcytosine (5hmC). One major advantage of Oxford Nanopore (Nanopore) and Pacific Biosciences (PacBio) sequencing platforms is that they capture both the primary DNA sequence and epigenetic modification states. This enables epigenetic analysis of sample-specific CpG loci that are not represented in the reference genome which typically account for  50% of heterozygous CpG loci in a sample, and a number of homozygous CpG loci depending on the evolutionary distance between the sample and the reference genome. Because these sample-specific loci are important for accurate modification analysis, this project provides a workflow for identifying them.
+Single-molecule sequencing is readily adapted for the analysis of epigenetic DNA modifications such as 5-methylcytosine (5mC) and 5-hydroxymethylcytosine (5hmC). A major advantage of Oxford Nanopore (Nanopore) and Pacific Biosciences (PacBio) sequencing platforms is their ability to capture both the primary DNA sequence and epigenetic modifications simultaneously. This enables the analysis of sample-specific CpG loci not represented in the reference genome, which typically account for approximately 50% of heterozygous CpG loci in a sample, as well as a variable number of homozygous CpG loci depending on the evolutionary distance between the sample and the reference genome. These sample-specific loci are important for accurate modification analyses, and this project provides a likelihood-based workflow for identifying both reference and non-reference CpG loci directly from a bedmethyl file.
+
+```mermaid
+flowchart LR
+    %% Tool nodes
+    T1["modkit pileup"]
+    T2["error_c2n"]
+    T3["likelihoods"]
+    T4["summarize_likelihoods"]
+    T5["filter_likelihoods"]
+
+    %% File nodes
+    F1["bedMethyl input<br/>.bedMethyl(.bgz/.gz)"]
+    F2["estimated error rate e"]
+    F3["manual error rate e (optional)"]
+    F4["bedMethyl + PL columns<br/>.bedMethyl.pl(.bgz/.gz)"]
+    F5["summary report"]
+    F6["filtered bedMethyl<br/>.filtered.bedMethyl.(bgz.gz)"]
+
+    %% Flow
+    T1 --> F1
+    F1 --> T2
+    T2 --> F2
+
+    F1 --> T3
+    F2 --> T3
+    F3 --> T3
+
+    T3 --> F4
+    F4 --> T4
+    T4 --> F5
+
+    F4 --> T5
+    T5 --> F6
+
+    %% Styling
+    classDef tool fill:#e8f1ff,stroke:#3b82f6,stroke-width:1.5px,color:#111827;
+    classDef file fill:#ecfdf5,stroke:#10b981,stroke-width:1.5px,color:#111827;
+
+    class T1,T2,T3,T4,T5 tool;
+    class F1,F2,F3,F4,F5,F6 file;
+```
 
 ## Table of contents
 
@@ -53,47 +94,6 @@ cargo run --bin error_c2n -- input.bedMethyl
 ```
 
 ## Quickstart 
-
-```mermaid
-flowchart LR
-    %% Tool nodes
-    T1["modkit pileup"]
-    T2["error_c2n"]
-    T3["likelihoods"]
-    T4["summarize_likelihoods"]
-    T5["filter_likelihoods"]
-
-    %% File nodes
-    F1["bedMethyl input<br/>.bedMethyl(.bgz/.gz)"]
-    F2["estimated error rate e"]
-    F3["manual error rate e (optional)"]
-    F4["bedMethyl + PL columns<br/>.bedMethyl.pl(.bgz/.gz)"]
-    F5["summary report"]
-    F6["filtered bedMethyl<br/>.filtered.bedMethyl.(bgz.gz)"]
-
-    %% Flow
-    T1 --> F1
-    F1 --> T2
-    T2 --> F2
-
-    F1 --> T3
-    F2 --> T3
-    F3 --> T3
-
-    T3 --> F4
-    F4 --> T4
-    T4 --> F5
-
-    F4 --> T5
-    T5 --> F6
-
-    %% Styling
-    classDef tool fill:#e8f1ff,stroke:#3b82f6,stroke-width:1.5px,color:#111827;
-    classDef file fill:#ecfdf5,stroke:#10b981,stroke-width:1.5px,color:#111827;
-
-    class T1,T2,T3,T4,T5 tool;
-    class F1,F2,F3,F4,F5,F6 file;
-```
 
 ```bash
 #Estimate the CpG-to-non-CpG error rate: 
