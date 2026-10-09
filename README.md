@@ -54,6 +54,47 @@ cargo run --bin error_c2n -- input.bedMethyl
 
 ## Quickstart 
 
+```mermaid
+flowchart LR
+    %% Tool nodes
+    T1["modkit pileup"]
+    T2["error_c2n"]
+    T3["likelihoods"]
+    T4["summarize_likelihoods"]
+    T5["filter_likelihoods"]
+
+    %% File nodes
+    F1["bedMethyl input<br/>.bedMethyl(.bgz/.gz)"]
+    F2["estimated error rate e"]
+    F3["manual error rate e (optional)"]
+    F4["bedMethyl + PL columns<br/>.bedMethyl.pl(.bgz/.gz)"]
+    F5["summary report"]
+    F6["filtered bedMethyl<br/>.filtered.bedMethyl.(bgz.gz)"]
+
+    %% Flow
+    T1 --> F1
+    F1 --> T2
+    T2 --> F2
+
+    F1 --> T3
+    F2 --> T3
+    F3 --> T3
+
+    T3 --> F4
+    F4 --> T4
+    T4 --> F5
+
+    F4 --> T5
+    T5 --> F6
+
+    %% Styling
+    classDef tool fill:#e8f1ff,stroke:#3b82f6,stroke-width:1.5px,color:#111827;
+    classDef file fill:#ecfdf5,stroke:#10b981,stroke-width:1.5px,color:#111827;
+
+    class T1,T2,T3,T4,T5 tool;
+    class F1,F2,F3,F4,F5,F6 file;
+```
+
 ```bash
 #Estimate the CpG-to-non-CpG error rate: 
 cargo run --bin error_c2n -- input.bedMethyl
