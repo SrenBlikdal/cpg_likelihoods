@@ -3,7 +3,7 @@ use flate2::Compression as GzipCompression;
 use flate2::read::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,16 +13,43 @@ enum BedCompression {
     Bgzip,
 }
 
+// This function detect the compression type of a BED file based on its file extension.
+// fn detect_bed_compression(path: &Path) -> BedCompression {
+//     let path_string = path.to_string_lossy();
+//     let path_lower = path_string.to_ascii_lowercase();
+//     if path_lower.ends_with(".bgz") {
+//         BedCompression::Bgzip
+//     } else if path_lower.ends_with(".gz") {
+//         BedCompression::Gzip
+//     } else {
+//         BedCompression::Plain
+//     }
+// }
+
+// Read enough of the gzip header to inspect the gzip magic bytes and
 fn detect_bed_compression(path: &Path) -> BedCompression {
-    let path_string = path.to_string_lossy();
-    let path_lower = path_string.to_ascii_lowercase();
-    if path_lower.ends_with(".bgz") {
-        BedCompression::Bgzip
-    } else if path_lower.ends_with(".gz") {
-        BedCompression::Gzip
-    } else {
-        BedCompression::Plain
+    let mut file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return BedCompression::Plain,
+    };
+
+    let mut header = [0u8; 18];
+    if file.read_exact(&mut header).is_err() {
+        return BedCompression::Plain;
     }
+
+    if header[0] != 0x1f || header[1] != 0x8b {
+        return BedCompression::Plain;
+    }
+    let flg = header[3];
+    if flg & 0x04 != 0 {
+        let xlen = u16::from_le_bytes([header[10], header[11]]);
+        if xlen >= 2 && header[12] == b'B' && header[13] == b'C' {
+            return BedCompression::Bgzip;
+        }
+    }
+
+    BedCompression::Gzip
 }
 
 pub fn open_bedmethyl_reader<P: AsRef<Path>>(
