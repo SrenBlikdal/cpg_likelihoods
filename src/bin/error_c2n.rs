@@ -34,6 +34,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.min_ratio,
     )?;
 
-    println!("{:.5}", e);
+    println!("{:.10}", e);
     Ok(())
 }

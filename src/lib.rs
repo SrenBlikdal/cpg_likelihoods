@@ -13,20 +13,7 @@ enum BedCompression {
     Bgzip,
 }
 
-// This function detect the compression type of a BED file based on its file extension.
-// fn detect_bed_compression(path: &Path) -> BedCompression {
-//     let path_string = path.to_string_lossy();
-//     let path_lower = path_string.to_ascii_lowercase();
-//     if path_lower.ends_with(".bgz") {
-//         BedCompression::Bgzip
-//     } else if path_lower.ends_with(".gz") {
-//         BedCompression::Gzip
-//     } else {
-//         BedCompression::Plain
-//     }
-// }
-
-// Read enough of the gzip header to inspect the gzip magic bytes and
+// Read enough of file to detect compression type: plain, gzip, or bgzip.
 fn detect_bed_compression(path: &Path) -> BedCompression {
     let mut file = match File::open(path) {
         Ok(f) => f,
@@ -48,7 +35,6 @@ fn detect_bed_compression(path: &Path) -> BedCompression {
             return BedCompression::Bgzip;
         }
     }
-
     BedCompression::Gzip
 }
 
@@ -174,10 +160,10 @@ pub fn parse_site_line(line: &str) -> Option<Site> {
     })
 }
 
-/// Estimate c2n error rate:
-/// ratio = cov/(cov+d)
-/// keep: min_cov <= cov <= max_cov and ratio >= min_ratio
-/// e_c2n = sum(d_keep) / (sum(d_keep)+sum(cov_keep))
+// Estimate CpG-to-nonCpG (c2n) error rate from high-confidence bedMethyl sites 
+// Get CpG (cov) to non-CpG (d) ratio = cov/(cov+d)
+// keep loci where: min_cov <= cov <= max_cov and ratio >= min_ratio
+// e_c2n = sum(d_keep) / (sum(d_keep)+sum(cov_keep))
 pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
     path: P,
     min_cov: u64,
@@ -228,6 +214,23 @@ pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
 
     Ok(sum_d as f64 / total as f64)
 }
+
+/// Compute the log10 likelihood for one CpG state at locus.
+///
+/// Genotype encoding:
+/// - `g = 0`: homozygous CpG (`hom_cpg`)
+/// - `g = 1`: heterozygous CpG (`het_cpg`)
+/// - `g = 2`: non-CpG (`non_cpg`)
+///
+/// Inputs:
+/// - `e`: CpG-to-non-CpG error rate
+/// - `cov`: count of CpG-supporting observations
+/// - `d`: count of non-CpG-supporting observations
+/// - `n`: scaling factor used in this likelihood model
+///
+/// Returns:
+/// - `Ok(log10_likelihood)` for valid genotype values
+/// - `Err(...)` if `g` is not one of `{0, 1, 2}`
 
 fn genotype_log10_likelihood(g: u8, e: f64, cov: u64, d: u64, n: f64) -> Result<f64, &'static str> {
     let (p_mismatch, p_match) = match g {

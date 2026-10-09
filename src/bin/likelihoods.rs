@@ -15,6 +15,10 @@ struct Args {
     #[arg(long)]
     out: String,
 
+    /// Manually set CpG->non-CpG error rate (e_c2n). If provided, skip estimation.
+    #[arg(long)]
+    e_c2n: Option<f64>,
+
     /// Minimum coverage for e_c2n estimation
     #[arg(long, default_value_t = 10)]
     min_cov: u64,
@@ -35,14 +39,25 @@ struct Args {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let e_c2n = estimate_error_c2n_from_bedmethyl(
-        &args.path,
-        args.min_cov,
-        args.max_cov,
-        args.min_ratio,
-    )?;
-
-    eprintln!("e_c2n = {:.10}", e_c2n);
+    let e_c2n = match args.e_c2n {
+        Some(v) => {
+            if !(0.0..=1.0).contains(&v) {
+                return Err("e_c2n must be between 0 and 1".into());
+            }
+            eprintln!("Using manual e_c2n = {:.10}", v);
+            v
+        }
+        None => {
+            let v = estimate_error_c2n_from_bedmethyl(
+                &args.path,
+                args.min_cov,
+                args.max_cov,
+                args.min_ratio,
+            )?;
+            eprintln!("Estimated e_c2n = {:.10}", v);
+            v
+        }
+    };
 
     append_pl_columns(&args.path, &args.out, e_c2n, args.n)?;
 
