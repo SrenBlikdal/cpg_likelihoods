@@ -1,5 +1,5 @@
 use clap::Parser;
-use cpg_likelihoods::{classify_from_pl, open_bedmethyl_reader, LocusClass};
+use cpg_likelihoods::{LocusClass, classify_from_pl, open_bedmethyl_reader};
 use std::io::BufRead;
 
 #[derive(Parser, Debug)]
@@ -28,7 +28,11 @@ struct Counts {
 }
 
 fn pct(n: u64, d: u64) -> f64 {
-    if d == 0 { 0.0 } else { (n as f64) * 100.0 / (d as f64) }
+    if d == 0 {
+        0.0
+    } else {
+        (n as f64) * 100.0 / (d as f64)
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -85,16 +89,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("min_GQ: {}", args.min_gq);
     println!("Total loci: {}", c.total);
     println!();
-    println!("Classification with separate homozygous and heterozygous CpG states:");  
-    println!("hom_cpg         {:>12}  {:>7.3}%", c.hom, pct(c.hom, c.total));
-    println!("het_cpg         {:>12}  {:>7.3}%", c.het, pct(c.het, c.total));
-    println!("non_cpg         {:>12}  {:>7.3}%", c.non, pct(c.non, c.total));
-    println!("unclassified    {:>12}  {:>7.3}%", all_unclassified, pct(all_unclassified, c.total));
+    println!("Classification with separate homozygous and heterozygous CpG states:");
+    println!(
+        "hom_cpg         {:>12}  {:>7.3}%",
+        c.hom,
+        pct(c.hom, c.total)
+    );
+    println!(
+        "het_cpg         {:>12}  {:>7.3}%",
+        c.het,
+        pct(c.het, c.total)
+    );
+    println!(
+        "non_cpg         {:>12}  {:>7.3}%",
+        c.non,
+        pct(c.non, c.total)
+    );
+    println!(
+        "unclassified    {:>12}  {:>7.3}%",
+        all_unclassified,
+        pct(all_unclassified, c.total)
+    );
     println!();
-    println!("Classification with collapsed homozygous and heterozygous CpG states:"); 
-    println!("hom/het_cpg     {:>12}  {:>7.3}%", hom_het, pct(hom_het, c.total));
-    println!("non_cpg         {:>12}  {:>7.3}%", c.non, pct(c.non, c.total));
-    println!("unclassified    {:>12}  {:>7.3}%", c.unclassified, pct(c.unclassified, c.total));
+    println!("Classification with collapsed homozygous and heterozygous CpG states:");
+    println!(
+        "hom/het_cpg     {:>12}  {:>7.3}%",
+        hom_het,
+        pct(hom_het, c.total)
+    );
+    println!(
+        "non_cpg         {:>12}  {:>7.3}%",
+        c.non,
+        pct(c.non, c.total)
+    );
+    println!(
+        "unclassified    {:>12}  {:>7.3}%",
+        c.unclassified,
+        pct(c.unclassified, c.total)
+    );
 
     Ok(())
 }

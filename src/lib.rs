@@ -65,7 +65,9 @@ impl BedWriter {
         let writer = match detect_bed_compression(path_ref) {
             BedCompression::Plain => Self::Plain(BufWriter::new(file)),
             BedCompression::Gzip => Self::Gzip(GzEncoder::new(file, GzipCompression::default())),
-            BedCompression::Bgzip => Self::Bgzip(BGZFWriter::new(file, BgzipCompression::default())),
+            BedCompression::Bgzip => {
+                Self::Bgzip(BGZFWriter::new(file, BgzipCompression::default()))
+            }
         };
         Ok(writer)
     }
@@ -125,7 +127,7 @@ pub struct LikelihoodResult {
     pub post_hom_cpg: f64,  // normalized probs
     pub post_het_cpg: f64,
     pub post_non_cpg: f64,
-    pub pl_hom_cpg: u32,    // GATK-style PL
+    pub pl_hom_cpg: u32, // GATK-style PL
     pub pl_het_cpg: u32,
     pub pl_non_cpg: u32,
 }
@@ -138,10 +140,10 @@ pub fn parse_site_line(line: &str) -> Option<Site> {
     }
 
     // 0-based indices
-    const COV_IDX: usize = 4;   // col5
-    const D15_IDX: usize = 14;  // col15
-    const D17_IDX: usize = 16;  // col17
-    const D18_IDX: usize = 17;  // col18
+    const COV_IDX: usize = 4; // col5
+    const D15_IDX: usize = 14; // col15
+    const D17_IDX: usize = 16; // col17
+    const D18_IDX: usize = 17; // col18
     const MIN_FIELDS: usize = 18;
 
     let fields: Vec<&str> = line.split('\t').collect();
@@ -160,7 +162,7 @@ pub fn parse_site_line(line: &str) -> Option<Site> {
     })
 }
 
-// Estimate CpG-to-nonCpG (c2n) error rate from high-confidence bedMethyl sites 
+// Estimate CpG-to-nonCpG (c2n) error rate from high-confidence bedMethyl sites
 // Get CpG (cov) to non-CpG (d) ratio = cov/(cov+d)
 // keep loci where: min_cov <= cov <= max_cov and ratio >= min_ratio
 // e_c2n = sum(d_keep) / (sum(d_keep)+sum(cov_keep))
@@ -380,12 +382,7 @@ pub enum LocusClass {
 /// Choose best class from PLs with threshold rules:
 /// - Unique minimum PL required.
 /// - GQ = second_smallest - smallest must be >= min_gq.
-pub fn classify_from_pl(
-    pl_hom: u32,
-    pl_het: u32,
-    pl_non: u32,
-    min_gq: u32,
-) -> LocusClass {
+pub fn classify_from_pl(pl_hom: u32, pl_het: u32, pl_non: u32, min_gq: u32) -> LocusClass {
     let mut vals = [(0_u8, pl_hom), (1_u8, pl_het), (2_u8, pl_non)];
     vals.sort_by_key(|x| x.1);
 
@@ -479,7 +476,11 @@ mod tests {
         let plain_path = temp_path("input.bed");
         let gzip_path = temp_path("input.bed.gz");
         let bgzip_path = temp_path("input.bed.bgz");
-        let _cleanup = Cleanup::new(vec![plain_path.clone(), gzip_path.clone(), bgzip_path.clone()]);
+        let _cleanup = Cleanup::new(vec![
+            plain_path.clone(),
+            gzip_path.clone(),
+            bgzip_path.clone(),
+        ]);
 
         write_lines(&plain_path, &lines)?;
         write_lines(&gzip_path, &lines)?;
@@ -513,8 +514,12 @@ mod tests {
         append_pl_columns(&input_path, &output_gz_path, 0.1, 2.0)?;
         append_pl_columns(&input_path, &output_bgz_path, 0.1, 2.0)?;
 
-        let gz_lines: Vec<String> = open_bedmethyl_reader(&output_gz_path)?.lines().collect::<Result<_, _>>()?;
-        let bgz_lines: Vec<String> = open_bedmethyl_reader(&output_bgz_path)?.lines().collect::<Result<_, _>>()?;
+        let gz_lines: Vec<String> = open_bedmethyl_reader(&output_gz_path)?
+            .lines()
+            .collect::<Result<_, _>>()?;
+        let bgz_lines: Vec<String> = open_bedmethyl_reader(&output_bgz_path)?
+            .lines()
+            .collect::<Result<_, _>>()?;
 
         for out_lines in [&gz_lines, &bgz_lines] {
             assert_eq!(out_lines.len(), 2);

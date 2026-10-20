@@ -27,12 +27,8 @@ struct Args {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let e = estimate_error_c2n_from_bedmethyl(
-        &args.path,
-        args.min_cov,
-        args.max_cov,
-        args.min_ratio,
-    )?;
+    let e =
+        estimate_error_c2n_from_bedmethyl(&args.path, args.min_cov, args.max_cov, args.min_ratio)?;
 
     println!("{:.10}", e);
     Ok(())

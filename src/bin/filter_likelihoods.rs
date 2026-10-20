@@ -1,5 +1,5 @@
 use clap::Parser;
-use cpg_likelihoods::{filter_bedmethyl_by_state, FilterState};
+use cpg_likelihoods::{FilterState, filter_bedmethyl_by_state};
 
 #[derive(Debug, Parser)]
 #[command(name = "filter_likelihoods")]
