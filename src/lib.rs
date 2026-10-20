@@ -373,7 +373,10 @@ pub fn append_pl_columns<P: AsRef<Path>>(
             writeln!(
                 writer,
                 "{}\t{}\t{}\t{}",
-                line, lk.pl_hom_cpg, lk.pl_het_cpg, lk.pl_non_cpg
+                line.split_ascii_whitespace().collect::<Vec<_>>().join("\t"),
+                lk.pl_hom_cpg,
+                lk.pl_het_cpg,
+                lk.pl_non_cpg
             )?;
         } else {
             // header-like/non-data row without '#'
@@ -629,7 +632,7 @@ pub fn filter_bedmethyl_by_state<P: AsRef<Path>>(
         }
 
         if keep_pl {
-            writeln!(writer, "{line}")?;
+            writeln!(writer, "{}", fields.join("\t"))?;
         } else {
             let filtered_fields = &fields[..fields.len().saturating_sub(3)];
             writeln!(writer, "{}", filtered_fields.join("\t"))?;

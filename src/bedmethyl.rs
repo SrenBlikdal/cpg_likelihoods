@@ -14,7 +14,7 @@ impl<'a> BedMethylRecord<'a> {
             return None;
         }
         Some(Self {
-            fields: line.split('\t').collect(),
+            fields: line.split_ascii_whitespace().collect(),
         })
     }
 
