@@ -1,21 +1,6 @@
-use clap::Parser;
 use cpg_likelihoods::{LocusClass, classify_from_pl, open_bedmethyl_reader};
 use std::io::BufRead;
-
-#[derive(Parser, Debug)]
-#[command(
-    author = "Søren Blikdal Hanssen",
-    version = "0.1.0",
-    about = "Locus classification summary from PL cols 19-21"
-)]
-struct Args {
-    /// Input bedMethyl file with PL columns in 19-21 (.bed, .bed.gz, or .bed.bgz)
-    path: String,
-
-    /// Minimum GQ threshold
-    #[arg(long, default_value_t = 20)]
-    min_gq: u32,
-}
+use std::path::Path;
 
 #[derive(Default)]
 struct Counts {
@@ -35,16 +20,14 @@ fn pct(n: u64, d: u64) -> f64 {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(input: &Path, min_gq: u32) -> Result<(), Box<dyn std::error::Error>> {
     // 1-based cols 19,20,21 => 0-based 18,19,20
     const PL_HOM_IDX: usize = 18;
     const PL_HET_IDX: usize = 19;
     const PL_NON_IDX: usize = 20;
     const MIN_FIELDS: usize = 21;
 
-    let args = Args::parse();
-
-    let reader = open_bedmethyl_reader(&args.path)?;
+    let reader = open_bedmethyl_reader(input)?;
 
     let mut c = Counts::default();
 
@@ -73,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         c.total += 1;
-        match classify_from_pl(pl_hom, pl_het, pl_non, args.min_gq) {
+        match classify_from_pl(pl_hom, pl_het, pl_non, min_gq) {
             LocusClass::HomCpg => c.hom += 1,
             LocusClass::HetCpg => c.het += 1,
             LocusClass::NonCpg => c.non += 1,
@@ -85,8 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hom_het = c.hom + c.het + c.unclassifiedcpg;
     let all_unclassified = c.unclassified + c.unclassifiedcpg;
 
-    println!("Input: {}", args.path);
-    println!("min_GQ: {}", args.min_gq);
+    println!("Input: {}", input.display());
+    println!("min_GQ: {}", min_gq);
     println!("Total loci: {}", c.total);
     println!();
     println!("Classification with separate homozygous and heterozygous CpG states:");
