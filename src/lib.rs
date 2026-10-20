@@ -397,7 +397,8 @@ pub enum LocusClass {
 }
 
 /// Choose best class from PLs with threshold rules:
-/// - Unique minimum PL required.
+/// - A separate-state call requires a unique minimum PL.
+/// - Hom/het ties can still qualify for the combined CpG category.
 /// - GQ = second_smallest - smallest must be >= min_gq.
 pub fn classify_from_pl(pl_hom: u32, pl_het: u32, pl_non: u32, min_gq: u32) -> LocusClass {
     let mut vals = [(0_u8, pl_hom), (1_u8, pl_het), (2_u8, pl_non)];
@@ -406,25 +407,14 @@ pub fn classify_from_pl(pl_hom: u32, pl_het: u32, pl_non: u32, min_gq: u32) -> L
     let best = vals[0];
     let second = vals[1];
 
-    // Tie at best PL -> unclassified
-    if best.1 == second.1 {
-        return LocusClass::Unclassified;
-    }
-
     let gq = second.1 - best.1;
-
-    // CpG-rescue bucket: best is hom/het, low GQ overall,
-    // but non_cpg is still clearly worse than best CpG.
-    if (best.0 == 0 || best.0 == 1) && gq < min_gq {
-        let best_cpg_pl = pl_hom.min(pl_het);
-        let cpg_vs_non_delta = pl_non.saturating_sub(best_cpg_pl);
-        if cpg_vs_non_delta >= min_gq {
+    // A tie prevents a separate-state call, but hom/het may still jointly
+    // exclude non-CpG. Check that evidence before returning unclassified.
+    if best.1 == second.1 || gq < min_gq {
+        let best_cpg = pl_hom.min(pl_het);
+        if pl_non > best_cpg && pl_non - best_cpg >= min_gq {
             return LocusClass::UnclassifiedCpg;
         }
-        return LocusClass::Unclassified;
-    }
-
-    if gq < min_gq {
         return LocusClass::Unclassified;
     }
 
