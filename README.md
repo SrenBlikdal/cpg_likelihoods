@@ -152,7 +152,7 @@ For each locus, the pileup has recorded genotypic information as:
 The function first identifies a subset of loci that are likely to represent homozygous CpG sites. By default the loci are retained if: 
 
 $$
-10 \leq C_i \leq 100 \qquad \text{and} \qquad \frac{C_i}{C_i + D_i} > 0.8,
+10 \leq C_i \leq 100 \qquad \text{and} \qquad \frac{C_i}{C_i + D_i} \geq 0.8,
 $$
 
 The corresponding thresholds can be adjusted using the command-line parameters `--min-cov`, `--max-cov`, and `--min-ratio`.
