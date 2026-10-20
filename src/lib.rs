@@ -336,6 +336,11 @@ pub fn append_pl_columns<P: AsRef<Path>>(
     e_c2n: f64,
     n: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if output_bed.as_ref().try_exists()?
+        && same_file::is_same_file(input_bed.as_ref(), output_bed.as_ref())?
+    {
+        return Err("input and output must refer to different files".into());
+    }
     let reader = open_bedmethyl_reader(input_bed)?;
     let mut writer = BedWriter::create(output_bed)?;
 
@@ -584,6 +589,11 @@ pub fn filter_bedmethyl_by_state<P: AsRef<Path>>(
     min_gq: u32,
     keep_pl: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if output_bed.as_ref().try_exists()?
+        && same_file::is_same_file(input_bed.as_ref(), output_bed.as_ref())?
+    {
+        return Err("input and output must refer to different files".into());
+    }
     let reader = open_bedmethyl_reader(input_bed)?;
     let mut writer = BedWriter::create(output_bed)?;
 

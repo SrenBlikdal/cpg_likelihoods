@@ -17,3 +17,4 @@ bin-dir = "{ bin }{ binary-ext }"
 clap = { version = "4", features = ["derive"] }
 flate2 = "1"
 bgzip = "0.3"
+same-file = "1"
