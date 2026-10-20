@@ -191,8 +191,8 @@ pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
     max_cov: u64,
     min_ratio: f64,
 ) -> Result<f64, Box<dyn std::error::Error>> {
-    if max_cov <= min_cov {
-        return Err("max_cov must be greater than min_cov".into());
+    if max_cov < min_cov {
+        return Err("max_cov must be greater than or equal to min_cov".into());
     }
     if !(0.0..=1.0).contains(&min_ratio) {
         return Err("min_ratio must be between 0 and 1".into());
