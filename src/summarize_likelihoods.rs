@@ -25,18 +25,13 @@ pub fn run(input: &Path, min_gq: u32) -> Result<(), Box<dyn std::error::Error>> 
 
     let mut c = Counts::default();
 
-    for line in reader.lines() {
-        let line = line?;
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-
-        let Some(record) = BedMethylRecord::parse(&line) else {
+    for (index, line) in reader.lines().enumerate() {
+        let context = |error| format!("{}:{}: {error}", input.display(), index + 1);
+        let line = line.map_err(|error| context(error.to_string()))?;
+        let Some(record) = BedMethylRecord::parse(&line).map_err(context)? else {
             continue;
         };
-        let Some([pl_hom, pl_het, pl_non]) = record.pl() else {
-            continue;
-        };
+        let [pl_hom, pl_het, pl_non] = record.pl().map_err(context)?;
 
         c.total += 1;
         match classify_from_pl(pl_hom, pl_het, pl_non, min_gq) {
