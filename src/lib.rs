@@ -1,3 +1,6 @@
+mod bedmethyl;
+pub use bedmethyl::BedMethylRecord;
+
 use bgzip::{BGZFWriter, Compression as BgzipCompression};
 use flate2::Compression as GzipCompression;
 use flate2::read::MultiGzDecoder;
@@ -172,31 +175,7 @@ pub struct LikelihoodResult {
 /// Parse one data line into Site.
 /// Returns None for header/comment/invalid lines.
 pub fn parse_site_line(line: &str) -> Option<Site> {
-    if line.is_empty() || line.starts_with('#') {
-        return None;
-    }
-
-    // 0-based indices
-    const COV_IDX: usize = 4; // col5
-    const D15_IDX: usize = 14; // col15
-    const D17_IDX: usize = 16; // col17
-    const D18_IDX: usize = 17; // col18
-    const MIN_FIELDS: usize = 18;
-
-    let fields: Vec<&str> = line.split('\t').collect();
-    if fields.len() < MIN_FIELDS {
-        return None;
-    }
-
-    let cov: u64 = fields[COV_IDX].parse().ok()?;
-    let d15: u64 = fields[D15_IDX].parse().ok()?;
-    let d17: u64 = fields[D17_IDX].parse().ok()?;
-    let d18: u64 = fields[D18_IDX].parse().ok()?;
-
-    Some(Site {
-        cov,
-        d: d15 + d17 + d18,
-    })
+    BedMethylRecord::parse(line)?.site()
 }
 
 // Estimate CpG-to-nonCpG (c2n) error rate from high-confidence bedMethyl sites
@@ -636,23 +615,13 @@ pub fn filter_bedmethyl_by_state<P: AsRef<Path>>(
             continue;
         }
 
-        let fields: Vec<&str> = line.split('\t').collect();
-        if fields.len() < 21 {
+        let Some(record) = BedMethylRecord::parse(&line) else {
             continue;
-        }
-
-        let pl_hom: u32 = match fields[18].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
         };
-        let pl_het: u32 = match fields[19].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
+        let Some([pl_hom, pl_het, pl_non]) = record.pl() else {
+            continue;
         };
-        let pl_non: u32 = match fields[20].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
+        let fields = &record.fields;
 
         let locus = classify_from_pl(pl_hom, pl_het, pl_non, min_gq);
         if !state.matches_class(locus) {

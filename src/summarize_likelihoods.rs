@@ -1,4 +1,4 @@
-use cpg_likelihoods::{LocusClass, classify_from_pl, open_bedmethyl_reader};
+use cpg_likelihoods::{BedMethylRecord, LocusClass, classify_from_pl, open_bedmethyl_reader};
 use std::io::BufRead;
 use std::path::Path;
 
@@ -21,12 +21,6 @@ fn pct(n: u64, d: u64) -> f64 {
 }
 
 pub fn run(input: &Path, min_gq: u32) -> Result<(), Box<dyn std::error::Error>> {
-    // 1-based cols 19,20,21 => 0-based 18,19,20
-    const PL_HOM_IDX: usize = 18;
-    const PL_HET_IDX: usize = 19;
-    const PL_NON_IDX: usize = 20;
-    const MIN_FIELDS: usize = 21;
-
     let reader = open_bedmethyl_reader(input)?;
 
     let mut c = Counts::default();
@@ -37,22 +31,11 @@ pub fn run(input: &Path, min_gq: u32) -> Result<(), Box<dyn std::error::Error>> 
             continue;
         }
 
-        let fields: Vec<&str> = line.split('\t').collect();
-        if fields.len() < MIN_FIELDS {
+        let Some(record) = BedMethylRecord::parse(&line) else {
             continue;
-        }
-
-        let pl_hom: u32 = match fields[PL_HOM_IDX].parse() {
-            Ok(v) => v,
-            Err(_) => continue, // header-like row
         };
-        let pl_het: u32 = match fields[PL_HET_IDX].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let pl_non: u32 = match fields[PL_NON_IDX].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
+        let Some([pl_hom, pl_het, pl_non]) = record.pl() else {
+            continue;
         };
 
         c.total += 1;
