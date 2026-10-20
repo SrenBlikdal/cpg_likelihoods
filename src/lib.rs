@@ -212,7 +212,7 @@ pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
             continue;
         };
 
-        let denom = site.cov + site.d;
+        let denom = u128::from(site.cov) + u128::from(site.d);
         if denom == 0 {
             continue;
         }

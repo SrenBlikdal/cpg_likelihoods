@@ -1,7 +1,9 @@
 mod common;
 
 use common::{Scratch, write_input};
-use cpg_likelihoods::{estimate_error_c2n_from_bedmethyl, likelihoods_with_normalization};
+use cpg_likelihoods::{
+    estimate_error_c2n_from_bedmethyl, likelihoods_with_normalization, parse_site_line,
+};
 
 #[test]
 fn counts_are_checked_and_equal_coverage_bounds_are_allowed() {
@@ -10,6 +12,18 @@ fn counts_are_checked_and_equal_coverage_bounds_are_allowed() {
     write_input(&input);
     let e = estimate_error_c2n_from_bedmethyl(&input, 30, 30, 0.8).unwrap();
     assert!((e - 2.0 / 32.0).abs() < 1e-12);
+    let data = std::fs::read_to_string(&input).unwrap();
+    let mut fields: Vec<_> = data.lines().next().unwrap().split('\t').collect();
+    fields[4] = "18446744073709551615";
+    fields[17] = "1";
+    std::fs::write(&input, fields.join("\t")).unwrap();
+    assert!(
+        estimate_error_c2n_from_bedmethyl(&input, 1, u64::MAX, 0.0)
+            .unwrap()
+            .is_finite()
+    );
+    fields[14] = "18446744073709551615";
+    assert!(parse_site_line(&fields.join("\t")).is_err());
 }
 
 #[test]

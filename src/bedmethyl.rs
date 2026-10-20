@@ -125,7 +125,10 @@ impl<'a> BedMethylRecord<'a> {
         let deleted = parse_count(14, "N_delete")?;
         let different = parse_count(16, "N_diff")?;
         let no_call = parse_count(17, "N_nocall")?;
-        let d = deleted + different + no_call;
+        let d = deleted
+            .checked_add(different)
+            .and_then(|d| d.checked_add(no_call))
+            .ok_or_else(|| "non-CpG counts exceed u64 range".to_owned())?;
         Ok(Some(Self {
             fields,
             site: Site { cov, d },
