@@ -115,23 +115,25 @@ You can then run the subcommands directly, for example:
 or use Cargo to run them from the project root:
 
 ```bash
-cargo run -- error_c2n input.bedMethyl
+cargo run -r -- error_c2n input.bedMethyl
 ```
 
-## Quickstart 
+Install the executable on your PATH with `cargo install --path . --locked`.
+
+## Quickstart
 
 ```bash
 #Estimate the CpG-to-non-CpG error rate: 
-cargo run -- error_c2n input.bedMethyl
+cargo run -r -- error_c2n input.bedMethyl
 
 #Calculate likelihoods and append PL columns to the bedMethyl file: 
-cargo run -- likelihoods input.bedMethyl --out output.bedMethyl
+cargo run -r -- likelihoods input.bedMethyl --out output.bedMethyl
 
 #Summarize the CpG states in the bedMethyl  
-cargo run -- summarize_likelihoods output.bedMethyl --min-gq 20
+cargo run -r -- summarize_likelihoods output.bedMethyl --min-gq 20
 
 #Filter for homozygous/heterozygous CpG loci and remove PL columns:
-cargo run -- filter_likelihoods --input-bed output.bedMethyl --output-bed filtered.bedMethyl --state CpG_hom/het --min-gq 20
+cargo run -r -- filter_likelihoods --input-bed output.bedMethyl --output-bed filtered.bedMethyl --state CpG_hom/het --min-gq 20
 ```
 
 ## Detailed usage 
