@@ -3,7 +3,7 @@ pub use bedmethyl::BedMethylRecord;
 
 use bgzip::{BGZFWriter, Compression as BgzipCompression};
 use flate2::Compression as GzipCompression;
-use flate2::read::MultiGzDecoder;
+use flate2::bufread::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
