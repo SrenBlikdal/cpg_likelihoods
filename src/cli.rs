@@ -74,7 +74,7 @@ pub struct LikelihoodsArgs {
     pub e_c2n: Option<f64>,
     #[command(flatten)]
     pub estimation: EstimationArgs,
-    /// n parameter in likelihood model
+    /// Common likelihood scale factor (does not affect PLs)
     #[arg(long, default_value_t = 2.0)]
     pub n: f64,
 }

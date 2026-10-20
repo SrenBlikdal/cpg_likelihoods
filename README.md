@@ -205,6 +205,14 @@ L({\mathrm{non-CpG}})=
 (1-\hat{\varepsilon})^{\ D_i}
 $$
 
+The optional `--n` parameter is a common likelihood scale factor.
+It adds `(C_i + D_i) * log10(n)` to all three reported log-likelihoods and
+therefore cancels from normalized probabilities and PLs. It must be finite and
+positive. Error rates must be finite and between zero and one (inclusive).
+Zero-coverage sites have equal likelihoods and remain unclassified. Normalized
+probabilities use equal genotype priors; they are not calibrated posterior
+confidence estimates.
+
 These values are transformed to raw Phred-scaled likelihoods for the CpG state L(z|Data) by -10*log(L(z|Data)) and normalized such that the lowest PL for each locus is 0 and the rest are scaled relative to that. 
 
 #### Example 2

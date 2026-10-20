@@ -22,6 +22,32 @@ fn likelihood_parameters_must_be_finite_and_in_range() {
 }
 
 #[test]
+fn common_scaling_does_not_change_normalized_likelihoods() {
+    let baseline = likelihoods_with_normalization(30, 2, 0.03333, 1.0).unwrap();
+    for n in [f64::from_bits(1), 0.5, 2.0, f64::MAX] {
+        let result = likelihoods_with_normalization(30, 2, 0.03333, n).unwrap();
+        assert_eq!(
+            [result.pl_hom_cpg, result.pl_het_cpg, result.pl_non_cpg],
+            [
+                baseline.pl_hom_cpg,
+                baseline.pl_het_cpg,
+                baseline.pl_non_cpg
+            ]
+        );
+        assert!((result.post_hom_cpg - baseline.post_hom_cpg).abs() < 1e-12);
+    }
+    // Rounded values from the README's first worked example.
+    assert_eq!(
+        [
+            baseline.pl_hom_cpg,
+            baseline.pl_het_cpg,
+            baseline.pl_non_cpg
+        ],
+        [0, 62, 409]
+    );
+}
+
+#[test]
 fn zero_coverage_and_boundary_error_rates_have_defined_results() {
     for e in [0.0, 0.5, 1.0] {
         let zero = likelihoods_with_normalization(0, 0, e, 2.0).unwrap();

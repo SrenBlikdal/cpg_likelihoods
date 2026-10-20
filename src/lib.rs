@@ -249,16 +249,15 @@ pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
 /// - `e`: CpG-to-non-CpG error rate
 /// - `cov`: count of CpG-supporting observations
 /// - `d`: count of non-CpG-supporting observations
-/// - `n`: scaling factor used in this likelihood model
 ///
 /// Returns:
 /// - `Ok(log10_likelihood)` for valid genotype values
 /// - `Err(...)` if `g` is not one of `{0, 1, 2}`
-fn genotype_log10_likelihood(g: u8, e: f64, cov: u64, d: u64, n: f64) -> Result<f64, &'static str> {
+fn genotype_log10_likelihood(g: u8, e: f64, cov: u64, d: u64) -> Result<f64, &'static str> {
     let (p_mismatch, p_match) = match g {
-        0 => (n * e, n * (1.0 - e)), // hom_cpg
-        1 => (n / 2.0, n / 2.0),     // het_cpg
-        2 => (n * (1.0 - e), n * e), // non_cpg
+        0 => (e, 1.0 - e), // hom_cpg
+        1 => (0.5, 0.5),   // het_cpg
+        2 => (1.0 - e, e), // non_cpg
         _ => return Err("Invalid genotype value. Must be 0,1,2"),
     };
 
@@ -325,7 +324,11 @@ fn validate_likelihood_parameters(e: f64, n: f64) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// Computes log10 likelihoods + normalized probs + PL values.
+/// Compute scaled log10 likelihoods, normalized probabilities, and PL values.
+/// `n` adds the same `(cov + d) * log10(n)` to each reported log10 value.
+/// It cancels from normalized probabilities and PLs, which are computed before
+/// adding that offset to avoid numerical underflow and cancellation.
+/// The `post_*` values assume equal genotype priors.
 pub fn likelihoods_with_normalization(
     cov: u64,
     d: u64,
@@ -333,19 +336,19 @@ pub fn likelihoods_with_normalization(
     n: f64,
 ) -> Result<LikelihoodResult, &'static str> {
     validate_likelihood_parameters(e, n)?;
-
-    let l0 = genotype_log10_likelihood(0, e, cov, d, n)?;
-    let l1 = genotype_log10_likelihood(1, e, cov, d, n)?;
-    let l2 = genotype_log10_likelihood(2, e, cov, d, n)?;
+    let l0 = genotype_log10_likelihood(0, e, cov, d)?;
+    let l1 = genotype_log10_likelihood(1, e, cov, d)?;
+    let l2 = genotype_log10_likelihood(2, e, cov, d)?;
 
     let log10s = [l0, l1, l2];
     let post = normalize_log10(log10s);
     let pl = log10_to_pl(log10s);
 
+    let offset = (cov as f64 + d as f64) * n.log10();
     Ok(LikelihoodResult {
-        log10_hom_cpg: l0,
-        log10_het_cpg: l1,
-        log10_non_cpg: l2,
+        log10_hom_cpg: l0 + offset,
+        log10_het_cpg: l1 + offset,
+        log10_non_cpg: l2 + offset,
         post_hom_cpg: post[0],
         post_het_cpg: post[1],
         post_non_cpg: post[2],
