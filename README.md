@@ -360,6 +360,40 @@ cpg-likelihoods filter_likelihoods --input-bed output.bedMethyl --output-bed fil
 The PL columns can be retained using --keep-pl
 
 ## Notes
+
+### Input interpretation and biological validation
+
+Use cytosine-modification pileups for this CpG model. Each bedMethyl data row is
+an independent record: the tool does not combine modification codes, strands,
+motifs, or repeated coordinates. The summary's **Total loci** is therefore a row
+count, not a count of unique genomic positions. Multiple modification-code rows
+can describe the same underlying observations. Record the modkit/basecaller
+versions and the exact commands used to generate your input, including any
+`--combine-mods`, `--combine-strands`, and motif filters.
+
+Modkit's `--cpg` option restricts output to reference CpGs. A dataset generated
+with that restriction cannot test discovery of non-reference CpGs excluded
+before this tool runs. Candidate-site generation for non-reference discovery
+needs a separately documented and validated procedure. See the
+[modkit pileup documentation](https://software-docs.nanoporetech.com/modkit/intro_pileup.html).
+
+This model uses column 5 (modkit's score, equal to valid coverage) as CpG support
+and columns 15 + 17 + 18 as non-CpG support. It treats deletions, different bases,
+and missing modification calls as evidence against CpG. A missing modification
+call is not itself proof of a non-CpG sequence: modkit defines it as an aligned
+canonical base without a modification call. Whether that proxy is appropriate
+depends on the basecalling model and input preparation. The likelihood model
+also assumes diploid genotypes, independent observations, and symmetric errors.
+Validate those assumptions with known genotypes before interpreting PL/GQ as
+evidence of biological accuracy. Software regression tests do not establish
+these assumptions.
+
+The modkit repository's
+[lung chr20 fixture](https://github.com/nanoporetech/modkit/blob/master/tests/resources/lung_00733-m_adjacent-normal_5mc-5hmc_chr20_cpg_pileup.bed.gz)
+is useful for testing gzip input and mixed delimiters. It is not a genotype truth
+set. The small fixtures in `tests/` are synthetic, allowing regression tests to
+run without downloading external data.
+
 Development alpha version - comes without any guaranty and with room for improvement.  
 
 
