@@ -1,9 +1,9 @@
-use bgzip::{BGZFReader, BGZFWriter, Compression as BgzipCompression};
+use bgzip::{BGZFWriter, Compression as BgzipCompression};
 use flate2::Compression as GzipCompression;
 use flate2::read::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
@@ -23,41 +23,16 @@ fn output_compression(path: &Path) -> BedCompression {
     }
 }
 
-// Read enough of file to detect compression type: plain, gzip, or bgzip.
-fn detect_bed_compression(path: &Path) -> BedCompression {
-    let mut file = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => return BedCompression::Plain,
-    };
-
-    let mut header = [0u8; 18];
-    if file.read_exact(&mut header).is_err() {
-        return BedCompression::Plain;
-    }
-
-    if header[0] != 0x1f || header[1] != 0x8b {
-        return BedCompression::Plain;
-    }
-    let flg = header[3];
-    if flg & 0x04 != 0 {
-        let xlen = u16::from_le_bytes([header[10], header[11]]);
-        if xlen >= 2 && header[12] == b'B' && header[13] == b'C' {
-            return BedCompression::Bgzip;
-        }
-    }
-    BedCompression::Gzip
-}
-
+/// Detect gzip by its signature. MultiGzDecoder also reads BGZF blocks and
+/// concatenated gzip members, regardless of the filename extension.
 pub fn open_bedmethyl_reader<P: AsRef<Path>>(
     path: P,
 ) -> Result<Box<dyn BufRead>, Box<dyn std::error::Error>> {
-    let path_ref = path.as_ref();
-    let file = File::open(path_ref)?;
-
-    match output_compression(path_ref) {
-        BedCompression::Plain => Ok(Box::new(BufReader::new(file))),
-        BedCompression::Gzip => Ok(Box::new(BufReader::new(MultiGzDecoder::new(file)))),
-        BedCompression::Bgzip => Ok(Box::new(BGZFReader::new(file)?)),
+    let mut reader = BufReader::new(File::open(path)?);
+    if reader.fill_buf()?.starts_with(&[0x1f, 0x8b]) {
+        Ok(Box::new(BufReader::new(MultiGzDecoder::new(reader))))
+    } else {
+        Ok(Box::new(reader))
     }
 }
 
