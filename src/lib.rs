@@ -14,6 +14,15 @@ enum BedCompression {
     Bgzip,
 }
 
+// Output encoding must be chosen before any bytes have been written.
+fn output_compression(path: &Path) -> BedCompression {
+    match path.extension().and_then(|s| s.to_str()) {
+        Some("gz") => BedCompression::Gzip,
+        Some("bgz" | "bgzf") => BedCompression::Bgzip,
+        _ => BedCompression::Plain,
+    }
+}
+
 // Read enough of file to detect compression type: plain, gzip, or bgzip.
 fn detect_bed_compression(path: &Path) -> BedCompression {
     let mut file = match File::open(path) {
@@ -45,7 +54,7 @@ pub fn open_bedmethyl_reader<P: AsRef<Path>>(
     let path_ref = path.as_ref();
     let file = File::open(path_ref)?;
 
-    match detect_bed_compression(path_ref) {
+    match output_compression(path_ref) {
         BedCompression::Plain => Ok(Box::new(BufReader::new(file))),
         BedCompression::Gzip => Ok(Box::new(BufReader::new(MultiGzDecoder::new(file)))),
         BedCompression::Bgzip => Ok(Box::new(BGZFReader::new(file)?)),
@@ -67,7 +76,7 @@ impl BedWriter {
     }
 
     fn from_file(file: File, path_ref: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        let writer = match detect_bed_compression(path_ref) {
+        let writer = match output_compression(path_ref) {
             BedCompression::Plain => Self::Plain(BufWriter::new(file)),
             BedCompression::Gzip => Self::Gzip(GzEncoder::new(file, GzipCompression::default())),
             BedCompression::Bgzip => {
