@@ -233,7 +233,6 @@ pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
 /// Returns:
 /// - `Ok(log10_likelihood)` for valid genotype values
 /// - `Err(...)` if `g` is not one of `{0, 1, 2}`
-
 fn genotype_log10_likelihood(g: u8, e: f64, cov: u64, d: u64, n: f64) -> Result<f64, &'static str> {
     let (p_mismatch, p_match) = match g {
         0 => (n * e, n * (1.0 - e)), // hom_cpg
@@ -544,9 +543,7 @@ impl FilterState {
     pub fn parse(raw: &str) -> Result<Self, String> {
         let normalized = raw
             .trim()
-            .replace(' ', "_")
-            .replace('-', "_")
-            .replace('/', "_")
+            .replace([' ', '-', '/'], "_")
             .to_ascii_lowercase();
 
         match normalized.as_str() {
