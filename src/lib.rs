@@ -177,6 +177,7 @@ pub fn parse_site_line(line: &str) -> Result<Option<Site>, String> {
     let Some(record) = BedMethylRecord::parse(line)? else {
         return Ok(None);
     };
+    record.require_columns(bedmethyl::BED_COLUMNS)?;
     Ok(Some(record.site))
 }
 
@@ -367,6 +368,9 @@ pub fn append_pl_columns<P: AsRef<Path>>(
                 .map_err(|error| context(error.to_string()))?;
             continue;
         };
+        record
+            .require_columns(bedmethyl::BED_COLUMNS)
+            .map_err(context)?;
         let lk = likelihoods_with_normalization(record.site.cov, record.site.d, e_c2n, n)
             .map_err(|error| context(error.to_string()))?;
         writeln!(
@@ -618,7 +622,7 @@ pub fn filter_bedmethyl_by_state<P: AsRef<Path>>(
         let fields = if keep_pl {
             &record.fields[..]
         } else {
-            &record.fields[..record.fields.len() - 3]
+            &record.fields[..bedmethyl::BED_COLUMNS]
         };
         writeln!(writer, "{}", fields.join("\t"))?;
     }

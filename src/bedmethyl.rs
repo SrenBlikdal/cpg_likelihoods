@@ -133,12 +133,7 @@ impl<'a> BedMethylRecord<'a> {
     }
 
     pub fn pl(&self) -> Result<[u32; 3], String> {
-        if self.fields.len() < ANNOTATED_COLUMNS {
-            return Err(format!(
-                "expected at least {ANNOTATED_COLUMNS} PL-annotated columns, found {}",
-                self.fields.len()
-            ));
-        }
+        self.require_columns(ANNOTATED_COLUMNS)?;
         let mut pl = [0; 3];
         for (i, value) in pl.iter_mut().enumerate() {
             *value = self.fields[18 + i].parse().map_err(|_| {
@@ -150,5 +145,9 @@ impl<'a> BedMethylRecord<'a> {
             })?;
         }
         Ok(pl)
+    }
+
+    pub fn require_columns(&self, expected: usize) -> Result<(), String> {
+        require_columns(self.fields.len(), expected)
     }
 }

@@ -39,3 +39,23 @@ fn headers_follow_pl_columns_while_comments_and_directives_are_preserved() {
         );
     }
 }
+
+#[test]
+fn extra_columns_and_reannotation_fail_instead_of_selecting_wrong_pls() {
+    let scratch = Scratch::new();
+    let input = scratch.path("input.bed");
+    let annotated = scratch.path("annotated.bed");
+    let output = scratch.path("output.bed");
+    write_input(&input);
+    append_pl_columns(&input, &annotated, 0.03, 2.0).unwrap();
+    assert!(append_pl_columns(&annotated, &output, 0.03, 2.0).is_err());
+    let data = std::fs::read_to_string(&annotated).unwrap();
+    let extra = data
+        .lines()
+        .map(|row| format!("{row}\tunexpected\n"))
+        .collect::<String>();
+    std::fs::write(&annotated, extra).unwrap();
+    assert!(
+        filter_bedmethyl_by_state(&annotated, &output, FilterState::HomHetCpg, 20, false).is_err()
+    );
+}
