@@ -177,7 +177,7 @@ pub fn parse_site_line(line: &str) -> Result<Option<Site>, String> {
     let Some(record) = BedMethylRecord::parse(line)? else {
         return Ok(None);
     };
-    Ok(Some(record.site()?))
+    Ok(Some(record.site))
 }
 
 // Estimate CpG-to-nonCpG (c2n) error rate from high-confidence bedMethyl sites
@@ -374,7 +374,7 @@ pub fn append_pl_columns<P: AsRef<Path>>(
             writeln!(writer, "{}\tPL_hom_cpg\tPL_het_cpg\tPL_non_cpg", line)?;
             continue;
         };
-        let site = record.site().map_err(context)?;
+        let site = record.site;
         let lk = likelihoods_with_normalization(site.cov, site.d, e_c2n, n)
             .map_err(|error| context(error.to_string()))?;
         writeln!(

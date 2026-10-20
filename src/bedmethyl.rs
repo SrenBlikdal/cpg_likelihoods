@@ -18,12 +18,15 @@ fn header_fields(line: &str) -> Option<(bool, Vec<&str>)> {
     }
 }
 
-/// Borrow fields and distinguish metadata from malformed records.
+/// A modkit bedMethyl row. Writers normalize the parsed fields to tabs.
 pub struct BedMethylRecord<'a> {
     pub fields: Vec<&'a str>,
+    pub site: Site,
 }
 
 impl<'a> BedMethylRecord<'a> {
+    /// Blank lines, comments, browser directives, and column headers return None.
+    /// Invalid data returns an error rather than looking like a skipped comment.
     pub fn parse(line: &'a str) -> Result<Option<Self>, String> {
         let line = line.trim();
         if line.is_empty()
@@ -43,11 +46,6 @@ impl<'a> BedMethylRecord<'a> {
                 fields.len()
             ));
         }
-        Ok(Some(Self { fields }))
-    }
-
-    pub fn site(&self) -> Result<Site, String> {
-        let fields = &self.fields;
         let parse_count = |index: usize, name: &str| -> Result<u64, String> {
             fields
                 .get(index)
@@ -66,7 +64,10 @@ impl<'a> BedMethylRecord<'a> {
         let different = parse_count(16, "N_diff")?;
         let no_call = parse_count(17, "N_nocall")?;
         let d = deleted + different + no_call;
-        Ok(Site { cov, d })
+        Ok(Some(Self {
+            fields,
+            site: Site { cov, d },
+        }))
     }
 
     pub fn pl(&self) -> Result<[u32; 3], String> {
