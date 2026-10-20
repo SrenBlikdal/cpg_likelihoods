@@ -226,7 +226,7 @@ L(\mathrm{CpG_{hom}})=
 (1-0.03333)^{30}
 \times
 0.03333^{2} =
-4.00 \times 10^{-4}
+4.02 \times 10^{-4}
 $$
 
 $$
@@ -240,15 +240,15 @@ L(\mathrm{nonCpG})=
 0.03333^{30}
 \times
 (1-0.03333)^{2} = 
-6.46 \times 10^{-45}
+4.52 \times 10^{-45}
 $$
 
 The raw Phred-scaled likelihoods are:
 
 $$
 PL(\mathrm{CpG_{hom}})=
--10\log_{10}(4.00 \times 10^{-4})=
-33.98
+-10\log_{10}(4.02 \times 10^{-4})=
+33.96
 $$
 
 $$
@@ -259,8 +259,8 @@ $$
 
 $$
 PL(\mathrm{nonCpG})=
--10\log_{10}(6.46 \times 10^{-45})=
-441.90
+-10\log_{10}(4.52 \times 10^{-45})=
+443.44
 $$
 
 The normalized PL where the minimum PL is then subtracted from all values are:
@@ -272,7 +272,7 @@ $$
 PL(\mathrm{CpG_{het}})=62
 $$
 $$
-PL(\mathrm{CpG_{het}})=408
+PL(\mathrm{nonCpG})=409
 $$
 
 Indicating strong support for a homozygous CpG at (`chr1:1000-1001`). 
@@ -281,10 +281,10 @@ The example table with normalized PL added:
 
 | chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall | PL(CpG_hom) | PL(CpG_het) | PL(non-CpG) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| chr1 | 1000 | 1001 | ... | 30 | 0 | 0 | 2 | 0 | 62 | 408 |
-| chr1 | 1001 | 1002 | ... | 28 | 0 | 0 | 0 | 0 | 77 | 412 |
-| chr1 | 1011 | 1012 | ... | 15 | 0 | 15 | 1 | 193 | 0 | 47 |
-| chr1 | 1012 | 1013 | ... | 13 | 0 | 15 | 1 | 181 | 0 | 34 |
+| chr1 | 1000 | 1001 | ... | 30 | 0 | 0 | 2 | 0 | 62 | 409 |
+| chr1 | 1001 | 1002 | ... | 28 | 0 | 0 | 0 | 0 | 80 | 409 |
+| chr1 | 1011 | 1012 | ... | 15 | 0 | 15 | 1 | 145 | 0 | 131 |
+| chr1 | 1012 | 1013 | ... | 13 | 0 | 15 | 1 | 151 | 0 | 107 |
 | chr1 | 1021 | 1022 | ... | 1 | 0 | 28 | 1 | 409 | 71 | 0 |
 | chr1 | 1033 | 1034 | ... | 30 | 6 | 1 | 1 | 8 | 0 | 330 |
 
@@ -302,10 +302,10 @@ It is often hard to distinguish homozygous and heterozygous CpGs leading to a hi
 
 | chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall | PL(CpG_hom) | PL(CpG_het) | PL(non-CpG) | state | GQ
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| chr1 | 1000 | 1001 | ... | 30 | 0 | 0 | 2 | 0 | 62 | 408 | CpG_hom | 62 |
-| chr1 | 1001 | 1002 | ... | 28 | 0 | 0 | 0 | 0 | 77 | 412 | CpG_hom | 77 |
-| chr1 | 1011 | 1012 | ... | 15 | 0 | 15 | 1 | 193 | 0 | 47 | CpG_het | 47 |
-| chr1 | 1012 | 1013 | ... | 13 | 0 | 15 | 1 | 181 | 0 | 34 | CpG_het | 34 |
+| chr1 | 1000 | 1001 | ... | 30 | 0 | 0 | 2 | 0 | 62 | 409 | CpG_hom | 62 |
+| chr1 | 1001 | 1002 | ... | 28 | 0 | 0 | 0 | 0 | 80 | 409 | CpG_hom | 80 |
+| chr1 | 1011 | 1012 | ... | 15 | 0 | 15 | 1 | 145 | 0 | 131 | CpG_het | 131 |
+| chr1 | 1012 | 1013 | ... | 13 | 0 | 15 | 1 | 151 | 0 | 107 | CpG_het | 107 |
 | chr1 | 1021 | 1022 | ... | 1 | 0 | 28 | 1 | 409 | 71 | 0 | non-CpG | 71 |
 | chr1 | 1033 | 1034 | ... | 30 | 6 | 1 | 1 | 8 | 0 | 330 | CpG_het | 8 |
 
