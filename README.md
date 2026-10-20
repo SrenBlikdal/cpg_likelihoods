@@ -58,6 +58,31 @@ flowchart LR
 
 ## Installation
 
+### Prebuilt executables
+
+Download the executable for your platform from
+[GitHub Releases](https://github.com/SrenBlikdal/cpg_likelihoods/releases).
+Binaries are available for Windows (x86-64), Linux (x86-64), and macOS (Intel and
+Apple Silicon). Linux builds require glibc from Ubuntu 22.04 or newer.
+
+Rename the downloaded file to `cpg-likelihoods` (`cpg-likelihoods.exe` on Windows)
+and place it on your PATH. On Linux/macOS, give it executable permission:
+
+```sh
+chmod +x cpg-likelihoods
+```
+
+### cargo-binstall
+
+With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) installed:
+
+```sh
+cargo binstall --git https://github.com/SrenBlikdal/cpg_likelihoods cpg_likelihoods
+cpg-likelihoods --help
+```
+
+### Build from source
+
 This project is written in Rust and uses Cargo for building and running the tools.
 
 1. Install the Rust toolchain if it is not already installed:

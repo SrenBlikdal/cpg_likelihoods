@@ -2,10 +2,16 @@
 name = "cpg_likelihoods"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/SrenBlikdal/cpg_likelihoods"
 
 [[bin]]
 name = "cpg-likelihoods"
 path = "src/main.rs"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/cpg-likelihoods-v{ version }-{ target }{ binary-ext }"
+pkg-fmt = "bin"
+bin-dir = "{ bin }{ binary-ext }"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

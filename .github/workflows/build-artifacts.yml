@@ -1,4 +1,4 @@
-name: Build downloadable binaries
+name: Publish release binaries
 
 on:
   workflow_dispatch:
@@ -7,6 +7,11 @@ on:
 
 permissions:
   contents: read
+
+# Serialize publication of a version rather than letting concurrent runs race.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -74,3 +79,54 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download executable assets
+        uses: actions/download-artifact@v8
+        with:
+          pattern: cpg-likelihoods-*
+          path: dist
+          merge-multiple: true
+      - name: Publish executables and standalone README
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          tag="v$version"
+          for target in x86_64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc; do
+            asset="dist/cpg-likelihoods-v$version-$target"
+            if [[ "$target" == *-windows-* ]]; then asset="$asset.exe"; fi
+            test -s "$asset"
+          done
+          # A failed gh request can write an error JSON body to stdout.
+          # Discard it rather than mistaking a missing tag for a commit ID.
+          existing_commit=$(gh api "repos/$GH_REPO/commits/$tag" --jq .sha 2>/dev/null) || existing_commit=''
+          if [[ -n "$existing_commit" && "$existing_commit" != "$GITHUB_SHA" ]]; then
+            echo "Tag $tag already points to a different commit; bump the package version." >&2
+            exit 1
+          fi
+          if gh release view "$tag" --json isDraft --jq .isDraft > release-state.txt 2>/dev/null; then
+            if [[ "$(cat release-state.txt)" != true ]]; then
+              echo "Release $tag is already published; bump the package version." >&2
+              exit 1
+            fi
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --draft \
+              --notes "Prebuilt executables for Linux, macOS (Intel and Apple Silicon), and Windows. Download the executable for your platform; README.md is provided separately. Install with: cargo binstall --git https://github.com/$GH_REPO cpg_likelihoods"
+          fi
+          # Keep the release a draft until every upload has succeeded.
+          gh release upload "$tag" dist/* README.md --clobber
+          prerelease=false
+          if [[ "$version" == *-* ]]; then prerelease=true; fi
+          gh release edit "$tag" --draft=false --prerelease="$prerelease"
