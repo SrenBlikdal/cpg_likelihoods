@@ -6,6 +6,44 @@ use cpg_likelihoods::{
 };
 
 #[test]
+fn likelihood_parameters_must_be_finite_and_in_range() {
+    for n in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0.0, -1.0] {
+        assert!(
+            likelihoods_with_normalization(30, 2, 0.03, n).is_err(),
+            "n={n}"
+        );
+    }
+    for e in [f64::NAN, f64::INFINITY, -0.01, 1.01] {
+        assert!(
+            likelihoods_with_normalization(30, 2, e, 2.0).is_err(),
+            "e={e}"
+        );
+    }
+}
+
+#[test]
+fn zero_coverage_and_boundary_error_rates_have_defined_results() {
+    for e in [0.0, 0.5, 1.0] {
+        let zero = likelihoods_with_normalization(0, 0, e, 2.0).unwrap();
+        assert_eq!(
+            [zero.pl_hom_cpg, zero.pl_het_cpg, zero.pl_non_cpg],
+            [0, 0, 0]
+        );
+        assert!((zero.post_hom_cpg - 1.0 / 3.0).abs() < 1e-12);
+        for (cov, d) in [(30, 0), (0, 30), (30, 2)] {
+            let result = likelihoods_with_normalization(cov, d, e, 2.0).unwrap();
+            let probabilities = [
+                result.post_hom_cpg,
+                result.post_het_cpg,
+                result.post_non_cpg,
+            ];
+            assert!(probabilities.iter().all(|p| p.is_finite()));
+            assert!((probabilities.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+        }
+    }
+}
+
+#[test]
 fn counts_are_checked_and_equal_coverage_bounds_are_allowed() {
     let scratch = Scratch::new();
     let input = scratch.path("input.bed");

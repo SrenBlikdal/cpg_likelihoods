@@ -315,6 +315,16 @@ fn normalize_log10(log10s: [f64; 3]) -> [f64; 3] {
     [x0 / s, x1 / s, x2 / s]
 }
 
+fn validate_likelihood_parameters(e: f64, n: f64) -> Result<(), &'static str> {
+    if !(0.0..=1.0).contains(&e) {
+        return Err("e must be finite and between 0 and 1");
+    }
+    if !n.is_finite() || n <= 0.0 {
+        return Err("n must be finite and > 0");
+    }
+    Ok(())
+}
+
 /// Computes log10 likelihoods + normalized probs + PL values.
 pub fn likelihoods_with_normalization(
     cov: u64,
@@ -322,12 +332,7 @@ pub fn likelihoods_with_normalization(
     e: f64,
     n: f64,
 ) -> Result<LikelihoodResult, &'static str> {
-    if !(0.0..=1.0).contains(&e) {
-        return Err("e must be between 0 and 1");
-    }
-    if n <= 0.0 {
-        return Err("n must be > 0");
-    }
+    validate_likelihood_parameters(e, n)?;
 
     let l0 = genotype_log10_likelihood(0, e, cov, d, n)?;
     let l1 = genotype_log10_likelihood(1, e, cov, d, n)?;
@@ -357,6 +362,7 @@ pub fn append_pl_columns<P: AsRef<Path>>(
     e_c2n: f64,
     n: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    validate_likelihood_parameters(e_c2n, n)?;
     let reader = open_bedmethyl_reader(&input_bed)?;
     let mut writer = BedOutput::create(input_bed.as_ref(), output_bed.as_ref())?;
 
