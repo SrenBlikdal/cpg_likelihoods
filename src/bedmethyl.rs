@@ -1,7 +1,9 @@
 use crate::Site;
+use std::io::{self, Write};
 
 pub const BED_COLUMNS: usize = 18;
 pub const ANNOTATED_COLUMNS: usize = 21;
+const PL_NAMES: [&str; 3] = ["PL_hom_cpg", "PL_het_cpg", "PL_non_cpg"];
 
 fn header_fields(line: &str) -> Option<(bool, Vec<&str>)> {
     let line = line.trim();
@@ -16,6 +18,66 @@ fn header_fields(line: &str) -> Option<(bool, Vec<&str>)> {
     } else {
         None
     }
+}
+
+fn require_columns(actual: usize, expected: usize) -> Result<(), String> {
+    if actual != expected {
+        Err(format!(
+            "expected exactly {expected} columns, found {actual}"
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn write_header<'a>(
+    writer: &mut impl Write,
+    commented: bool,
+    fields: impl IntoIterator<Item = &'a str>,
+) -> io::Result<()> {
+    if commented {
+        writer.write_all(b"#")?;
+    }
+    for (index, field) in fields.into_iter().enumerate() {
+        if index > 0 {
+            writer.write_all(b"\t")?;
+        }
+        writer.write_all(field.as_bytes())?;
+    }
+    writer.write_all(b"\n")
+}
+
+pub(crate) fn append_pl_header(writer: &mut impl Write, line: &str) -> io::Result<()> {
+    let Some((commented, fields)) = header_fields(line) else {
+        return writeln!(writer, "{line}");
+    };
+    require_columns(fields.len(), BED_COLUMNS)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    write_header(writer, commented, fields.into_iter().chain(PL_NAMES))
+}
+
+pub(crate) fn filter_pl_header(
+    writer: &mut impl Write,
+    line: &str,
+    keep_pl: bool,
+) -> io::Result<()> {
+    let Some((commented, fields)) = header_fields(line) else {
+        return writeln!(writer, "{line}");
+    };
+    require_columns(fields.len(), ANNOTATED_COLUMNS)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    if fields[BED_COLUMNS..] != PL_NAMES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "expected PL_hom_cpg, PL_het_cpg, PL_non_cpg as header columns 19-21",
+        ));
+    }
+    let columns = if keep_pl {
+        ANNOTATED_COLUMNS
+    } else {
+        BED_COLUMNS
+    };
+    write_header(writer, commented, fields[..columns].iter().copied())
 }
 
 /// A modkit bedMethyl row. Writers normalize the parsed fields to tabs.

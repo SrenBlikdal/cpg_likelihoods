@@ -362,20 +362,12 @@ pub fn append_pl_columns<P: AsRef<Path>>(
     for (index, line) in reader.lines().enumerate() {
         let context = |error| format!("{}:{}: {error}", input_bed.as_ref().display(), index + 1);
         let line = line.map_err(|error| context(error.to_string()))?;
-        if line.is_empty() {
-            writeln!(writer)?;
-            continue;
-        }
-        if line.starts_with('#') {
-            writeln!(writer, "{}\tPL_hom_cpg\tPL_het_cpg\tPL_non_cpg", line)?;
-            continue;
-        }
         let Some(record) = BedMethylRecord::parse(&line).map_err(context)? else {
-            writeln!(writer, "{}\tPL_hom_cpg\tPL_het_cpg\tPL_non_cpg", line)?;
+            bedmethyl::append_pl_header(&mut writer, &line)
+                .map_err(|error| context(error.to_string()))?;
             continue;
         };
-        let site = record.site;
-        let lk = likelihoods_with_normalization(site.cov, site.d, e_c2n, n)
+        let lk = likelihoods_with_normalization(record.site.cov, record.site.d, e_c2n, n)
             .map_err(|error| context(error.to_string()))?;
         writeln!(
             writer,
@@ -613,7 +605,8 @@ pub fn filter_bedmethyl_by_state<P: AsRef<Path>>(
         let context = |error| format!("{}:{}: {error}", input_bed.as_ref().display(), index + 1);
         let line = line.map_err(|error| context(error.to_string()))?;
         let Some(record) = BedMethylRecord::parse(&line).map_err(context)? else {
-            writeln!(writer, "{line}")?;
+            bedmethyl::filter_pl_header(&mut writer, &line, keep_pl)
+                .map_err(|error| context(error.to_string()))?;
             continue;
         };
         let [pl_hom, pl_het, pl_non] = record.pl().map_err(context)?;
