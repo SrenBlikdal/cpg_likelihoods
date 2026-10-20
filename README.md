@@ -135,6 +135,20 @@ cargo run -- filter_likelihoods --input-bed output.bedMethyl --output-bed filter
 ```
 
 ## Detailed usage 
+
+Input uses exactly the 18-column modkit bedMethyl schema. Annotated input to
+summary/filter has exactly 21 columns, with `PL_hom_cpg`, `PL_het_cpg`, and
+`PL_non_cpg` appended in that order. Reannotation and extra columns are rejected.
+Column headers are updated when PL columns are added or removed; other metadata
+is preserved. Both tab-only and mixed
+tab/space delimiters are accepted; generated data rows use tabs. Blank lines,
+`#` comments, BED `track`/`browser` directives, and recognized column headers
+are treated as metadata. Malformed data stops processing with the input path,
+line number, and a field or column-count error. Failed processing preserves any
+previous output, and input/output paths referring to the same file are rejected.
+Input compression is detected from the contents; output uses gzip for `.gz`,
+BGZF for `.bgz`/`.bgzf`, and plain text for other extensions.
+
 The workflow consists of four subcommands. Run `cpg-likelihoods --help` or
 `cpg-likelihoods <subcommand> --help` for usage.
 
