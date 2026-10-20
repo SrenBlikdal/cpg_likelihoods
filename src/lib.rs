@@ -4,7 +4,8 @@ use flate2::read::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BedCompression {
@@ -58,10 +59,14 @@ enum BedWriter {
 }
 
 impl BedWriter {
+    #[cfg(test)]
     fn create<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
         let path_ref = path.as_ref();
         let file = File::create(path_ref)?;
+        Self::from_file(file, path_ref)
+    }
 
+    fn from_file(file: File, path_ref: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let writer = match detect_bed_compression(path_ref) {
             BedCompression::Plain => Self::Plain(BufWriter::new(file)),
             BedCompression::Gzip => Self::Gzip(GzEncoder::new(file, GzipCompression::default())),
@@ -106,6 +111,54 @@ impl Write for BedWriter {
             Self::Gzip(writer) => writer.flush(),
             Self::Bgzip(writer) => writer.flush(),
         }
+    }
+}
+
+/// Write beside the destination, then replace it only after a successful finish.
+/// Dropping an unfinished output removes the temporary file.
+struct BedOutput {
+    // Drop the writer before the temporary file (important on Windows).
+    writer: BedWriter,
+    temporary: NamedTempFile,
+    destination: PathBuf,
+}
+
+impl BedOutput {
+    fn create(input: &Path, output: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        if output.try_exists()? && same_file::is_same_file(input, output)? {
+            return Err("input and output must refer to different files".into());
+        }
+        let parent = output
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let temporary = NamedTempFile::new_in(parent)?;
+        let writer = BedWriter::from_file(temporary.as_file().try_clone()?, output)?;
+        Ok(Self {
+            writer,
+            temporary,
+            destination: output.to_owned(),
+        })
+    }
+
+    fn finish(self) -> Result<(), Box<dyn std::error::Error>> {
+        self.writer.finish()?;
+        // Convert PersistError to io::Error so the temporary file is cleaned up
+        // immediately instead of being retained inside the returned error.
+        self.temporary
+            .persist(&self.destination)
+            .map_err(|error| error.error)?;
+        Ok(())
+    }
+}
+
+impl Write for BedOutput {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.writer.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.writer.flush()
     }
 }
 
@@ -336,13 +389,8 @@ pub fn append_pl_columns<P: AsRef<Path>>(
     e_c2n: f64,
     n: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if output_bed.as_ref().try_exists()?
-        && same_file::is_same_file(input_bed.as_ref(), output_bed.as_ref())?
-    {
-        return Err("input and output must refer to different files".into());
-    }
-    let reader = open_bedmethyl_reader(input_bed)?;
-    let mut writer = BedWriter::create(output_bed)?;
+    let reader = open_bedmethyl_reader(&input_bed)?;
+    let mut writer = BedOutput::create(input_bed.as_ref(), output_bed.as_ref())?;
 
     for line in reader.lines() {
         let line = line?;
@@ -589,13 +637,8 @@ pub fn filter_bedmethyl_by_state<P: AsRef<Path>>(
     min_gq: u32,
     keep_pl: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if output_bed.as_ref().try_exists()?
-        && same_file::is_same_file(input_bed.as_ref(), output_bed.as_ref())?
-    {
-        return Err("input and output must refer to different files".into());
-    }
-    let reader = open_bedmethyl_reader(input_bed)?;
-    let mut writer = BedWriter::create(output_bed)?;
+    let reader = open_bedmethyl_reader(&input_bed)?;
+    let mut writer = BedOutput::create(input_bed.as_ref(), output_bed.as_ref())?;
 
     for line in reader.lines() {
         let line = line?;
