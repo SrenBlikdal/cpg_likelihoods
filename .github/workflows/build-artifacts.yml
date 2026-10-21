@@ -1,0 +1,132 @@
+name: Publish release binaries
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# Serialize publication of a version rather than letting concurrent runs race.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            binary: cpg-likelihoods
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: cpg-likelihoods
+          - os: macos-15
+            target: aarch64-apple-darwin
+            binary: cpg-likelihoods
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: cpg-likelihoods.exe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --target "${{ matrix.target }}"
+      - name: Check version tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(cargo +stable metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          if [[ "$REF_TYPE" == tag && "$REF_NAME" != "v$version" ]]; then
+            echo "Tag $REF_NAME must match Cargo.toml version v$version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Test
+        run: cargo +stable test --locked --all-targets --target "${{ matrix.target }}"
+      - name: Build release binary
+        run: cargo +stable build --locked --release --bin cpg-likelihoods --target "${{ matrix.target }}"
+      - name: Smoke test
+        run: target/${{ matrix.target }}/release/${{ matrix.binary }} --version
+      - name: Prepare executable asset
+        env:
+          TARGET: ${{ matrix.target }}
+          BINARY: ${{ matrix.binary }}
+        run: |
+          mkdir dist
+          asset="cpg-likelihoods-v$VERSION-$TARGET"
+          if [[ "$BINARY" == *.exe ]]; then
+            asset="$asset.exe"
+          fi
+          cp "target/$TARGET/release/$BINARY" "dist/$asset"
+          echo "ASSET=$asset" >> "$GITHUB_ENV"
+      - name: Upload executable for release job
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ASSET }}
+          path: dist/*
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download executable assets
+        uses: actions/download-artifact@v8
+        with:
+          pattern: cpg-likelihoods-*
+          path: dist
+          merge-multiple: true
+      - name: Publish executables and standalone README
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          tag="v$version"
+          for target in x86_64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc; do
+            asset="dist/cpg-likelihoods-v$version-$target"
+            if [[ "$target" == *-windows-* ]]; then asset="$asset.exe"; fi
+            test -s "$asset"
+          done
+          # A failed gh request can write an error JSON body to stdout.
+          # Discard it rather than mistaking a missing tag for a commit ID.
+          existing_commit=$(gh api "repos/$GH_REPO/commits/$tag" --jq .sha 2>/dev/null) || existing_commit=''
+          if [[ -n "$existing_commit" && "$existing_commit" != "$GITHUB_SHA" ]]; then
+            echo "Tag $tag already points to a different commit; bump the package version." >&2
+            exit 1
+          fi
+          if gh release view "$tag" --json isDraft --jq .isDraft > release-state.txt 2>/dev/null; then
+            if [[ "$(cat release-state.txt)" != true ]]; then
+              echo "Release $tag is already published; bump the package version." >&2
+              exit 1
+            fi
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --draft \
+              --notes "Prebuilt executables for Linux, macOS (Intel and Apple Silicon), and Windows. Download the executable for your platform; README.md is provided separately. Install with: cargo binstall --git https://github.com/$GH_REPO cpg_likelihoods"
+          fi
+          # Keep the release a draft until every upload has succeeded.
+          gh release upload "$tag" dist/* README.md --clobber
+          prerelease=false
+          if [[ "$version" == *-* ]]; then prerelease=true; fi
+          gh release edit "$tag" --draft=false --prerelease="$prerelease"

@@ -1,10 +1,14 @@
-use bgzip::{BGZFReader, BGZFWriter, Compression as BgzipCompression};
+mod bedmethyl;
+pub use bedmethyl::BedMethylRecord;
+
+use bgzip::{BGZFWriter, Compression as BgzipCompression};
 use flate2::Compression as GzipCompression;
-use flate2::read::MultiGzDecoder;
+use flate2::bufread::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
-use std::path::Path;
+use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BedCompression {
@@ -13,41 +17,25 @@ enum BedCompression {
     Bgzip,
 }
 
-// Read enough of file to detect compression type: plain, gzip, or bgzip.
-fn detect_bed_compression(path: &Path) -> BedCompression {
-    let mut file = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => return BedCompression::Plain,
-    };
-
-    let mut header = [0u8; 18];
-    if file.read_exact(&mut header).is_err() {
-        return BedCompression::Plain;
+// Output encoding must be chosen before any bytes have been written.
+fn output_compression(path: &Path) -> BedCompression {
+    match path.extension().and_then(|s| s.to_str()) {
+        Some("gz") => BedCompression::Gzip,
+        Some("bgz" | "bgzf") => BedCompression::Bgzip,
+        _ => BedCompression::Plain,
     }
-
-    if header[0] != 0x1f || header[1] != 0x8b {
-        return BedCompression::Plain;
-    }
-    let flg = header[3];
-    if flg & 0x04 != 0 {
-        let xlen = u16::from_le_bytes([header[10], header[11]]);
-        if xlen >= 2 && header[12] == b'B' && header[13] == b'C' {
-            return BedCompression::Bgzip;
-        }
-    }
-    BedCompression::Gzip
 }
 
+/// Detect gzip by its signature. MultiGzDecoder also reads BGZF blocks and
+/// concatenated gzip members, regardless of the filename extension.
 pub fn open_bedmethyl_reader<P: AsRef<Path>>(
     path: P,
 ) -> Result<Box<dyn BufRead>, Box<dyn std::error::Error>> {
-    let path_ref = path.as_ref();
-    let file = File::open(path_ref)?;
-
-    match detect_bed_compression(path_ref) {
-        BedCompression::Plain => Ok(Box::new(BufReader::new(file))),
-        BedCompression::Gzip => Ok(Box::new(BufReader::new(MultiGzDecoder::new(file)))),
-        BedCompression::Bgzip => Ok(Box::new(BGZFReader::new(file)?)),
+    let mut reader = BufReader::new(File::open(path)?);
+    if reader.fill_buf()?.starts_with(&[0x1f, 0x8b]) {
+        Ok(Box::new(BufReader::new(MultiGzDecoder::new(reader))))
+    } else {
+        Ok(Box::new(reader))
     }
 }
 
@@ -58,14 +46,20 @@ enum BedWriter {
 }
 
 impl BedWriter {
+    #[cfg(test)]
     fn create<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
         let path_ref = path.as_ref();
         let file = File::create(path_ref)?;
+        Self::from_file(file, path_ref)
+    }
 
-        let writer = match detect_bed_compression(path_ref) {
+    fn from_file(file: File, path_ref: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let writer = match output_compression(path_ref) {
             BedCompression::Plain => Self::Plain(BufWriter::new(file)),
             BedCompression::Gzip => Self::Gzip(GzEncoder::new(file, GzipCompression::default())),
-            BedCompression::Bgzip => Self::Bgzip(BGZFWriter::new(file, BgzipCompression::default())),
+            BedCompression::Bgzip => {
+                Self::Bgzip(BGZFWriter::new(file, BgzipCompression::default()))
+            }
         };
         Ok(writer)
     }
@@ -107,6 +101,54 @@ impl Write for BedWriter {
     }
 }
 
+/// Write beside the destination, then replace it only after a successful finish.
+/// Dropping an unfinished output removes the temporary file.
+struct BedOutput {
+    // Drop the writer before the temporary file (important on Windows).
+    writer: BedWriter,
+    temporary: NamedTempFile,
+    destination: PathBuf,
+}
+
+impl BedOutput {
+    fn create(input: &Path, output: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        if output.try_exists()? && same_file::is_same_file(input, output)? {
+            return Err("input and output must refer to different files".into());
+        }
+        let parent = output
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let temporary = NamedTempFile::new_in(parent)?;
+        let writer = BedWriter::from_file(temporary.as_file().try_clone()?, output)?;
+        Ok(Self {
+            writer,
+            temporary,
+            destination: output.to_owned(),
+        })
+    }
+
+    fn finish(self) -> Result<(), Box<dyn std::error::Error>> {
+        self.writer.finish()?;
+        // Convert PersistError to io::Error so the temporary file is cleaned up
+        // immediately instead of being retained inside the returned error.
+        self.temporary
+            .persist(&self.destination)
+            .map_err(|error| error.error)?;
+        Ok(())
+    }
+}
+
+impl Write for BedOutput {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.writer.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.writer.flush()
+    }
+}
+
 /// One parsed bedMethyl locus using your fixed schema:
 /// - cov = col5 (1-based)
 /// - d   = col15 + col17 + col18 (1-based)
@@ -125,42 +167,21 @@ pub struct LikelihoodResult {
     pub post_hom_cpg: f64,  // normalized probs
     pub post_het_cpg: f64,
     pub post_non_cpg: f64,
-    pub pl_hom_cpg: u32,    // GATK-style PL
+    pub pl_hom_cpg: u32, // GATK-style PL
     pub pl_het_cpg: u32,
     pub pl_non_cpg: u32,
 }
 
-/// Parse one data line into Site.
-/// Returns None for header/comment/invalid lines.
-pub fn parse_site_line(line: &str) -> Option<Site> {
-    if line.is_empty() || line.starts_with('#') {
-        return None;
-    }
-
-    // 0-based indices
-    const COV_IDX: usize = 4;   // col5
-    const D15_IDX: usize = 14;  // col15
-    const D17_IDX: usize = 16;  // col17
-    const D18_IDX: usize = 17;  // col18
-    const MIN_FIELDS: usize = 18;
-
-    let fields: Vec<&str> = line.split('\t').collect();
-    if fields.len() < MIN_FIELDS {
-        return None;
-    }
-
-    let cov: u64 = fields[COV_IDX].parse().ok()?;
-    let d15: u64 = fields[D15_IDX].parse().ok()?;
-    let d17: u64 = fields[D17_IDX].parse().ok()?;
-    let d18: u64 = fields[D18_IDX].parse().ok()?;
-
-    Some(Site {
-        cov,
-        d: d15 + d17 + d18,
-    })
+/// Parse counts, distinguishing metadata from malformed data.
+pub fn parse_site_line(line: &str) -> Result<Option<Site>, String> {
+    let Some(record) = BedMethylRecord::parse(line)? else {
+        return Ok(None);
+    };
+    record.require_columns(bedmethyl::BED_COLUMNS)?;
+    Ok(Some(record.site))
 }
 
-// Estimate CpG-to-nonCpG (c2n) error rate from high-confidence bedMethyl sites 
+// Estimate CpG-to-nonCpG (c2n) error rate from high-confidence bedMethyl sites
 // Get CpG (cov) to non-CpG (d) ratio = cov/(cov+d)
 // keep loci where: min_cov <= cov <= max_cov and ratio >= min_ratio
 // e_c2n = sum(d_keep) / (sum(d_keep)+sum(cov_keep))
@@ -170,26 +191,28 @@ pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
     max_cov: u64,
     min_ratio: f64,
 ) -> Result<f64, Box<dyn std::error::Error>> {
-    if max_cov <= min_cov {
-        return Err("max_cov must be greater than min_cov".into());
+    if max_cov < min_cov {
+        return Err("max_cov must be greater than or equal to min_cov".into());
     }
     if !(0.0..=1.0).contains(&min_ratio) {
         return Err("min_ratio must be between 0 and 1".into());
     }
 
+    let path = path.as_ref();
     let reader = open_bedmethyl_reader(path)?;
 
     let mut sum_cov: u128 = 0;
     let mut sum_d: u128 = 0;
     let mut n_sites: u64 = 0;
 
-    for line in reader.lines() {
-        let line = line?;
-        let Some(site) = parse_site_line(&line) else {
+    for (index, line) in reader.lines().enumerate() {
+        let context = |error| format!("{}:{}: {error}", path.display(), index + 1);
+        let line = line.map_err(|error| context(error.to_string()))?;
+        let Some(site) = parse_site_line(&line).map_err(context)? else {
             continue;
         };
 
-        let denom = site.cov + site.d;
+        let denom = u128::from(site.cov) + u128::from(site.d);
         if denom == 0 {
             continue;
         }
@@ -226,17 +249,15 @@ pub fn estimate_error_c2n_from_bedmethyl<P: AsRef<Path>>(
 /// - `e`: CpG-to-non-CpG error rate
 /// - `cov`: count of CpG-supporting observations
 /// - `d`: count of non-CpG-supporting observations
-/// - `n`: scaling factor used in this likelihood model
 ///
 /// Returns:
 /// - `Ok(log10_likelihood)` for valid genotype values
 /// - `Err(...)` if `g` is not one of `{0, 1, 2}`
-
-fn genotype_log10_likelihood(g: u8, e: f64, cov: u64, d: u64, n: f64) -> Result<f64, &'static str> {
+fn genotype_log10_likelihood(g: u8, e: f64, cov: u64, d: u64) -> Result<f64, &'static str> {
     let (p_mismatch, p_match) = match g {
-        0 => (n * e, n * (1.0 - e)), // hom_cpg
-        1 => (n / 2.0, n / 2.0),     // het_cpg
-        2 => (n * (1.0 - e), n * e), // non_cpg
+        0 => (e, 1.0 - e), // hom_cpg
+        1 => (0.5, 0.5),   // het_cpg
+        2 => (1.0 - e, e), // non_cpg
         _ => return Err("Invalid genotype value. Must be 0,1,2"),
     };
 
@@ -293,32 +314,41 @@ fn normalize_log10(log10s: [f64; 3]) -> [f64; 3] {
     [x0 / s, x1 / s, x2 / s]
 }
 
-/// Computes log10 likelihoods + normalized probs + PL values.
+fn validate_likelihood_parameters(e: f64, n: f64) -> Result<(), &'static str> {
+    if !(0.0..=1.0).contains(&e) {
+        return Err("e must be finite and between 0 and 1");
+    }
+    if !n.is_finite() || n <= 0.0 {
+        return Err("n must be finite and > 0");
+    }
+    Ok(())
+}
+
+/// Compute scaled log10 likelihoods, normalized probabilities, and PL values.
+/// `n` adds the same `(cov + d) * log10(n)` to each reported log10 value.
+/// It cancels from normalized probabilities and PLs, which are computed before
+/// adding that offset to avoid numerical underflow and cancellation.
+/// The `post_*` values assume equal genotype priors.
 pub fn likelihoods_with_normalization(
     cov: u64,
     d: u64,
     e: f64,
     n: f64,
 ) -> Result<LikelihoodResult, &'static str> {
-    if !(0.0..=1.0).contains(&e) {
-        return Err("e must be between 0 and 1");
-    }
-    if n <= 0.0 {
-        return Err("n must be > 0");
-    }
-
-    let l0 = genotype_log10_likelihood(0, e, cov, d, n)?;
-    let l1 = genotype_log10_likelihood(1, e, cov, d, n)?;
-    let l2 = genotype_log10_likelihood(2, e, cov, d, n)?;
+    validate_likelihood_parameters(e, n)?;
+    let l0 = genotype_log10_likelihood(0, e, cov, d)?;
+    let l1 = genotype_log10_likelihood(1, e, cov, d)?;
+    let l2 = genotype_log10_likelihood(2, e, cov, d)?;
 
     let log10s = [l0, l1, l2];
     let post = normalize_log10(log10s);
     let pl = log10_to_pl(log10s);
 
+    let offset = (cov as f64 + d as f64) * n.log10();
     Ok(LikelihoodResult {
-        log10_hom_cpg: l0,
-        log10_het_cpg: l1,
-        log10_non_cpg: l2,
+        log10_hom_cpg: l0 + offset,
+        log10_het_cpg: l1 + offset,
+        log10_non_cpg: l2 + offset,
         post_hom_cpg: post[0],
         post_het_cpg: post[1],
         post_non_cpg: post[2],
@@ -335,33 +365,31 @@ pub fn append_pl_columns<P: AsRef<Path>>(
     e_c2n: f64,
     n: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let reader = open_bedmethyl_reader(input_bed)?;
-    let mut writer = BedWriter::create(output_bed)?;
+    validate_likelihood_parameters(e_c2n, n)?;
+    let reader = open_bedmethyl_reader(&input_bed)?;
+    let mut writer = BedOutput::create(input_bed.as_ref(), output_bed.as_ref())?;
 
-    for line in reader.lines() {
-        let line = line?;
-        if line.is_empty() {
-            writeln!(writer)?;
+    for (index, line) in reader.lines().enumerate() {
+        let context = |error| format!("{}:{}: {error}", input_bed.as_ref().display(), index + 1);
+        let line = line.map_err(|error| context(error.to_string()))?;
+        let Some(record) = BedMethylRecord::parse(&line).map_err(context)? else {
+            bedmethyl::append_pl_header(&mut writer, &line)
+                .map_err(|error| context(error.to_string()))?;
             continue;
-        }
-
-        if line.starts_with('#') {
-            writeln!(writer, "{}\tPL_hom_cpg\tPL_het_cpg\tPL_non_cpg", line)?;
-            continue;
-        }
-
-        if let Some(site) = parse_site_line(&line) {
-            let lk = likelihoods_with_normalization(site.cov, site.d, e_c2n, n)
-                .map_err(|e| format!("likelihood error: {e}"))?;
-            writeln!(
-                writer,
-                "{}\t{}\t{}\t{}",
-                line, lk.pl_hom_cpg, lk.pl_het_cpg, lk.pl_non_cpg
-            )?;
-        } else {
-            // header-like/non-data row without '#'
-            writeln!(writer, "{}\tPL_hom_cpg\tPL_het_cpg\tPL_non_cpg", line)?;
-        }
+        };
+        record
+            .require_columns(bedmethyl::BED_COLUMNS)
+            .map_err(context)?;
+        let lk = likelihoods_with_normalization(record.site.cov, record.site.d, e_c2n, n)
+            .map_err(|error| context(error.to_string()))?;
+        writeln!(
+            writer,
+            "{}\t{}\t{}\t{}",
+            record.fields.join("\t"),
+            lk.pl_hom_cpg,
+            lk.pl_het_cpg,
+            lk.pl_non_cpg
+        )?;
     }
 
     writer.finish()
@@ -378,39 +406,24 @@ pub enum LocusClass {
 }
 
 /// Choose best class from PLs with threshold rules:
-/// - Unique minimum PL required.
+/// - A separate-state call requires a unique minimum PL.
+/// - Hom/het ties can still qualify for the combined CpG category.
 /// - GQ = second_smallest - smallest must be >= min_gq.
-pub fn classify_from_pl(
-    pl_hom: u32,
-    pl_het: u32,
-    pl_non: u32,
-    min_gq: u32,
-) -> LocusClass {
+pub fn classify_from_pl(pl_hom: u32, pl_het: u32, pl_non: u32, min_gq: u32) -> LocusClass {
     let mut vals = [(0_u8, pl_hom), (1_u8, pl_het), (2_u8, pl_non)];
     vals.sort_by_key(|x| x.1);
 
     let best = vals[0];
     let second = vals[1];
 
-    // Tie at best PL -> unclassified
-    if best.1 == second.1 {
-        return LocusClass::Unclassified;
-    }
-
     let gq = second.1 - best.1;
-
-    // CpG-rescue bucket: best is hom/het, low GQ overall,
-    // but non_cpg is still clearly worse than best CpG.
-    if (best.0 == 0 || best.0 == 1) && gq < min_gq {
-        let best_cpg_pl = pl_hom.min(pl_het);
-        let cpg_vs_non_delta = pl_non.saturating_sub(best_cpg_pl);
-        if cpg_vs_non_delta >= min_gq {
+    // A tie prevents a separate-state call, but hom/het may still jointly
+    // exclude non-CpG. Check that evidence before returning unclassified.
+    if best.1 == second.1 || gq < min_gq {
+        let best_cpg = pl_hom.min(pl_het);
+        if pl_non > best_cpg && pl_non - best_cpg >= min_gq {
             return LocusClass::UnclassifiedCpg;
         }
-        return LocusClass::Unclassified;
-    }
-
-    if gq < min_gq {
         return LocusClass::Unclassified;
     }
 
@@ -479,7 +492,11 @@ mod tests {
         let plain_path = temp_path("input.bed");
         let gzip_path = temp_path("input.bed.gz");
         let bgzip_path = temp_path("input.bed.bgz");
-        let _cleanup = Cleanup::new(vec![plain_path.clone(), gzip_path.clone(), bgzip_path.clone()]);
+        let _cleanup = Cleanup::new(vec![
+            plain_path.clone(),
+            gzip_path.clone(),
+            bgzip_path.clone(),
+        ]);
 
         write_lines(&plain_path, &lines)?;
         write_lines(&gzip_path, &lines)?;
@@ -513,8 +530,12 @@ mod tests {
         append_pl_columns(&input_path, &output_gz_path, 0.1, 2.0)?;
         append_pl_columns(&input_path, &output_bgz_path, 0.1, 2.0)?;
 
-        let gz_lines: Vec<String> = open_bedmethyl_reader(&output_gz_path)?.lines().collect::<Result<_, _>>()?;
-        let bgz_lines: Vec<String> = open_bedmethyl_reader(&output_bgz_path)?.lines().collect::<Result<_, _>>()?;
+        let gz_lines: Vec<String> = open_bedmethyl_reader(&output_gz_path)?
+            .lines()
+            .collect::<Result<_, _>>()?;
+        let bgz_lines: Vec<String> = open_bedmethyl_reader(&output_bgz_path)?
+            .lines()
+            .collect::<Result<_, _>>()?;
 
         for out_lines in [&gz_lines, &bgz_lines] {
             assert_eq!(out_lines.len(), 2);
@@ -539,9 +560,7 @@ impl FilterState {
     pub fn parse(raw: &str) -> Result<Self, String> {
         let normalized = raw
             .trim()
-            .replace(' ', "_")
-            .replace('-', "_")
-            .replace('/', "_")
+            .replace([' ', '-', '/'], "_")
             .to_ascii_lowercase();
 
         match normalized.as_str() {
@@ -582,50 +601,29 @@ pub fn filter_bedmethyl_by_state<P: AsRef<Path>>(
     min_gq: u32,
     keep_pl: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let reader = open_bedmethyl_reader(input_bed)?;
-    let mut writer = BedWriter::create(output_bed)?;
+    let reader = open_bedmethyl_reader(&input_bed)?;
+    let mut writer = BedOutput::create(input_bed.as_ref(), output_bed.as_ref())?;
 
-    for line in reader.lines() {
-        let line = line?;
-        if line.is_empty() {
-            writeln!(writer)?;
+    for (index, line) in reader.lines().enumerate() {
+        let context = |error| format!("{}:{}: {error}", input_bed.as_ref().display(), index + 1);
+        let line = line.map_err(|error| context(error.to_string()))?;
+        let Some(record) = BedMethylRecord::parse(&line).map_err(context)? else {
+            bedmethyl::filter_pl_header(&mut writer, &line, keep_pl)
+                .map_err(|error| context(error.to_string()))?;
             continue;
-        }
-
-        if line.starts_with('#') {
-            writeln!(writer, "{line}")?;
-            continue;
-        }
-
-        let fields: Vec<&str> = line.split('\t').collect();
-        if fields.len() < 21 {
-            continue;
-        }
-
-        let pl_hom: u32 = match fields[18].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
         };
-        let pl_het: u32 = match fields[19].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let pl_non: u32 = match fields[20].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-
+        let [pl_hom, pl_het, pl_non] = record.pl().map_err(context)?;
         let locus = classify_from_pl(pl_hom, pl_het, pl_non, min_gq);
+        // A valid record not matching the requested state is intentionally excluded.
         if !state.matches_class(locus) {
             continue;
         }
-
-        if keep_pl {
-            writeln!(writer, "{line}")?;
+        let fields = if keep_pl {
+            &record.fields[..]
         } else {
-            let filtered_fields = &fields[..fields.len().saturating_sub(3)];
-            writeln!(writer, "{}", filtered_fields.join("\t"))?;
-        }
+            &record.fields[..bedmethyl::BED_COLUMNS]
+        };
+        writeln!(writer, "{}", fields.join("\t"))?;
     }
 
     writer.finish()
