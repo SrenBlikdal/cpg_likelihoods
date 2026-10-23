@@ -5,7 +5,7 @@ edition = "2024"
 repository = "https://github.com/SrenBlikdal/cpg_likelihoods"
 
 [[bin]]
-name = "cpg-likelihoods"
+name = "cpg"
 path = "src/main.rs"
 
 [package.metadata.binstall]

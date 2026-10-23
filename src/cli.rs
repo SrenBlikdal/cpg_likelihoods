@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "cpg-likelihoods",
+    name = "cpg",
     version,
     about = "Infer CpG states from bedMethyl counts"
 )]
@@ -18,15 +18,16 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Estimate the CpG-to-non-CpG error rate
-    #[command(name = "error_c2n")]
+    #[command(name = "error-rate")]
     ErrorC2n(ErrorC2nArgs),
     /// Append Phred-scaled likelihoods as columns 19-21
+    #[command(name = "likelihoods")]
     Likelihoods(LikelihoodsArgs),
     /// Summarize CpG states from a PL-annotated bedMethyl file
-    #[command(name = "summarize_likelihoods")]
+    #[command(name = "summarize")]
     SummarizeLikelihoods(SummarizeLikelihoodsArgs),
     /// Filter a PL-annotated bedMethyl file by CpG state
-    #[command(name = "filter_likelihoods")]
+    #[command(name = "filter")]
     FilterLikelihoods(FilterLikelihoodsArgs),
 }
 
@@ -121,10 +122,9 @@ impl SummarizeLikelihoodsArgs {
 
 #[derive(Debug, Args)]
 pub struct FilterLikelihoodsArgs {
+    pub input: PathBuf,
     #[arg(long)]
-    pub input_bed: PathBuf,
-    #[arg(long)]
-    pub output_bed: PathBuf,
+    pub out: PathBuf,
     /// CpG_hom, CpG_het, non-CpG, or CpG_hom/het
     #[arg(long)]
     pub state: FilterState,
@@ -138,8 +138,8 @@ pub struct FilterLikelihoodsArgs {
 impl FilterLikelihoodsArgs {
     pub fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         filter_bedmethyl_by_state(
-            &self.input_bed,
-            &self.output_bed,
+            &self.input,
+            &self.out,
             self.state,
             self.min_gq,
             self.keep_pl,
