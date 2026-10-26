@@ -81,9 +81,10 @@ flowchart LR
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Command reference](#command-reference)
-  - [Error-rate](#estimate-error-rate)
-  - [Likelihoods](#calculate-likelihoods)
-  - [Summarize and filter likelihoods](#summarize-and-filter-likelihoods)
+  - [error-rate](#estimate-error-rate)
+  - [likelihoods](#calculate-likelihoods)
+  - [summarize](#summarize)
+  - [filter](#filter)
 - [Notes](#notes)
 
 ## Installation
