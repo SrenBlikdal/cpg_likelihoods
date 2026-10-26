@@ -10,17 +10,17 @@ The workflow takes a modkit `bedMethyl` file as input and produces likelihood-an
 
 ```bash
 # Estimate CpG-to-non-CpG error-rate from bedmethyl
-cpg error-rate input.bedMethyl
+cpg error-rate sample.bedMethyl
 
 # Calculate likelihoods and append to the bedmethyl file
-cpg likelihoods input.bedMethyl --out output.bedMethyl
+cpg likelihoods sample.bedMethyl --out sample.pl.bedMethyl
 
 # Summarize CpG states
-cpg summarize output.bedMethyl --min-gq 20
+cpg summarize sample.pl.bedMethyl --min-gq 20
 
 # Filter loci and remove PL columns
-cpg filter output.bedMethyl \
-  --out filtered.bedMethyl \
+cpg filter sample.pl.bedMethyl \
+  --out sample.filtered.bedMethyl \
   --state CpG_hom/het \
   --min-gq 20
 ```
@@ -30,7 +30,7 @@ flowchart LR
 
     subgraph EXT["Preprocessing"]
         T1["modkit pileup"]
-        F1["bedMethyl input\n.bedMethyl(.bgz/.gz)"]
+        F1["bedMethyl sample.\n.bedMethyl(.bgz/.gz)"]
         T1 --> F1
     end
 
@@ -138,13 +138,13 @@ ls target/release/
 You can then run the subcommands directly, for example:
 
 ```bash
-./target/release/cpg-likelihoods error_c2n input.bedMethyl
+./target/release/cpg-likelihoods error-rate sample.bedMethyl
 ```
 
 or use Cargo to run them from the project root:
 
 ```bash
-cargo run -r -- error_c2n input.bedMethyl
+cargo run -r -- error-rate sample.bedMethyl
 ```
 
 Install the executable on your PATH with `cargo install --path . --locked`.
@@ -156,7 +156,7 @@ CpG use a bedMethyl pileup file from modkit as input.
 To retain non-reference CpG loci, generate the pileup without specifying --cpg and without providing a reference genome.
 
 ```bash
-modkit pileup path/to/sample.bam output/path/sample.bed \
+modkit pileup path/to/sample.bam output/path/sample.bedMethyl \
   --modified-bases 5mC 5hmC
 ```
 
@@ -164,28 +164,28 @@ modkit pileup path/to/sample.bam output/path/sample.bed \
 Estimate a sample-specific CpG-to-non-CpG error rate.
 
 ```bash
-cpg error-rate sample.bed
+cpg error-rate sample.bedMethyl
 ```
 
 ### 3. Calculate likelihoods
 Append phred-scaled likelihood (PL) values for the three possible CpG states.
 
 ```bash
-cpg likelihoods sample.bed --out sample.pl.bed
+cpg likelihoods sample.bedMethyl --out sample.pl.bed
 ```
 
 ### 4. Summarize CpG states
 Generate summary statistics for CpG states in the likelihood-annotated file.
 
 ```bash
-cpg summarize sample.pl.bed --min-gq 20
+cpg summarize sample.pl.bedMethyl--min-gq 20
 ```
 
 ### 5. Filter loci
 Retain loci matching the requested CpG state and minimum genotype quality.
 
 ```bash
-cpg filter sample.pl.bed
+cpg filter sample.pl.bedMethyl
   --out filtered.bedMethyl \
   --state CpG_hom/het \
   --min-gq 20
@@ -354,7 +354,7 @@ After normalization, `CpG_hom` is the best-supported state (PL = 0). Relative to
 The normalized PL values for all example loci are shown below:
 
 ```bash
-cpg likelihoods sample.bed --out sample.pl.bed
+cpg likelihoods sample.bedMethyl --out sample.pl.bedMethyl
 ```
 
 | chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall | PL(CpG_hom) | PL(CpG_het) | PL(non-CpG) |
@@ -380,7 +380,7 @@ It can be difficult to distinguish homozygous and heterozygous CpGs, leading to 
 
 #### Example: Summarizing likelihoods 
 ```bash
-cpg summarize sample.pl.bed --min-gq 20
+cpg summarize sample.pl.bedMethyl --min-gq 20
 ```
 
 | chrom | start | end | ... | N_valid_cov | N_delete | N_diff | N_nocall | PL(CpG_hom) | PL(CpG_het) | PL(non-CpG) | state | GQ
