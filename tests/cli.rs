@@ -37,10 +37,7 @@ fn four_subcommands_complete_a_workflow() {
         "--out".as_ref(),
         annotated.as_os_str(),
     ]));
-    let report = success(cli(&[
-        "summarize".as_ref(),
-        annotated.as_os_str(),
-    ]));
+    let report = success(cli(&["summarize".as_ref(), annotated.as_os_str()]));
     assert!(report.contains("Total loci: 3"));
 
     success(cli(&[
@@ -59,12 +56,7 @@ fn four_subcommands_complete_a_workflow() {
 #[test]
 fn help_lists_subcommands_and_missing_arguments_fail() {
     let help = success(cli(&["--help".as_ref()]));
-    for name in [
-        "error-rate",
-        "likelihoods",
-        "summarize",
-        "filter",
-    ] {
+    for name in ["error-rate", "likelihoods", "summarize", "filter"] {
         assert!(help.contains(name));
         success(cli(&[name.as_ref(), "--help".as_ref()]));
     }
